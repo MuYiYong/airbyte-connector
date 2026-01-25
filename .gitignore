@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+
+# VSCode
+.vscode/
+
+# MacOS
+.DS_Store
+
+# Test & temp
+*.log
+*.tmp
+*.swp
+
+# Docs & local
+*.html
+yueshu-graph-5.2.0/
+
+# Config samples
+configs/*.json
+!configs/*.sample.json
