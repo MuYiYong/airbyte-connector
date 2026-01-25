@@ -12,7 +12,8 @@ from .common import emit_message, read_config_from_env_or_path
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser("yueshu-airbyte")
     parser.add_argument("--connector-type", choices=["source", "destination"], default=None)
-    parser.add_argument("--command", choices=["spec", "check", "discover", "read", "write"], required=False)
+    parser.add_argument("command", nargs="?", choices=["spec", "check", "discover", "read", "write"], default=None)
+    parser.add_argument("--command", dest="command_opt", choices=["spec", "check", "discover", "read", "write"], required=False)
     parser.add_argument("--config", required=False)
     return parser.parse_args()
 
@@ -23,7 +24,7 @@ def _get_connector(args: argparse.Namespace):
 
 
 def _get_command(args: argparse.Namespace) -> str:
-    return args.command or os.environ.get("AIRBYTE_COMMAND", "spec")
+    return args.command or args.command_opt or os.environ.get("AIRBYTE_COMMAND", "spec")
 
 
 def _read_config(args: argparse.Namespace) -> Dict[str, Any]:
