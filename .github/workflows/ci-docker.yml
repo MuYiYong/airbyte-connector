@@ -52,7 +52,7 @@ jobs:
           context: .
           file: Dockerfile.source
           push: true
-          tags: ghcr.io/${{ github.repository_owner || github.repository_owner.toLowerCase() }}/airbyte-connector-source:latest
+          tags: ghcr.io/${{ github.repository_owner.toLowerCase() }}/airbyte-connector-source:latest
 
       - name: Build and push destination image
         uses: docker/build-push-action@v5
@@ -60,4 +60,4 @@ jobs:
           context: .
           file: Dockerfile.destination
           push: true
-          tags: ghcr.io/${{ github.repository_owner || github.repository_owner.toLowerCase() }}/airbyte-connector-destination:latest
+          tags: ghcr.io/${{ github.repository_owner.toLowerCase() }}/airbyte-connector-destination:latest
