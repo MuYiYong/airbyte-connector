@@ -8,6 +8,10 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   build-test:
     runs-on: ubuntu-latest
@@ -41,6 +45,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -66,8 +73,6 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/${{ env.REPO_OWNER_LC }}/airbyte-connector-source:latest
-            ghcr.io/${{ env.REPO_OWNER_LC }}/airbyte-connector-source:amd64
-            ghcr.io/${{ env.REPO_OWNER_LC }}/airbyte-connector-source:arm64
 
       - name: Build and push destination image (multi-arch)
         uses: docker/build-push-action@v5
@@ -78,5 +83,3 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: |
             ghcr.io/${{ env.REPO_OWNER_LC }}/airbyte-connector-destination:latest
-            ghcr.io/${{ env.REPO_OWNER_LC }}/airbyte-connector-destination:amd64
-            ghcr.io/${{ env.REPO_OWNER_LC }}/airbyte-connector-destination:arm64
