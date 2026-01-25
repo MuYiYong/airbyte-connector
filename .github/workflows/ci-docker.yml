@@ -75,7 +75,7 @@ jobs:
         id: repo_owner_lower
         run: echo "REPO_OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
 
-      - name: Build and push arch image + export tar for kind load
+      - name: Build and push arch image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -84,14 +84,6 @@ jobs:
           platforms: linux/${{ matrix.arch }}
           tags: |
             ghcr.io/${{ env.REPO_OWNER_LC }}/${{ matrix.image.name }}:${{ matrix.arch }}
-          outputs: |
-            type=docker,dest=/tmp/${{ matrix.image.name }}-${{ matrix.arch }}.tar
-
-      - name: Upload kind load image archive
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.image.name }}-${{ matrix.arch }}-kind
-          path: /tmp/${{ matrix.image.name }}-${{ matrix.arch }}.tar
 
   build-and-push-multiarch-latest:
     needs: build-test
