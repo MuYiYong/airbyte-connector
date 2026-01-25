@@ -1,7 +1,5 @@
-      - name: Debug repo owner
-        run: |
-          echo "GITHUB_REPOSITORY_OWNER=$GITHUB_REPOSITORY_OWNER"
-          echo "REPO_OWNER_LC=${REPO_OWNER_LC}"
+name: CI & Publish Docker
+
 name: CI & Publish Docker
 
 on:
@@ -16,6 +14,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      - name: Debug repo owner
+        run: |
+          echo "GITHUB_REPOSITORY_OWNER=$GITHUB_REPOSITORY_OWNER"
+          echo "REPO_OWNER_LC=${REPO_OWNER_LC}"
 
       - name: Set up Python
         uses: actions/setup-python@v5
