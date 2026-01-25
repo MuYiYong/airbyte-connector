@@ -38,11 +38,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to DockerHub
+
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push source image
         uses: docker/build-push-action@v5
@@ -50,7 +52,7 @@ jobs:
           context: .
           file: Dockerfile.source
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/airbyte-connector-source:latest
+          tags: ghcr.io/${{ github.repository_owner }}/airbyte-connector-source:latest
 
       - name: Build and push destination image
         uses: docker/build-push-action@v5
@@ -58,4 +60,4 @@ jobs:
           context: .
           file: Dockerfile.destination
           push: true
-          tags: ${{ secrets.DOCKERHUB_USERNAME }}/airbyte-connector-destination:latest
+          tags: ghcr.io/${{ github.repository_owner }}/airbyte-connector-destination:latest
