@@ -57,18 +57,26 @@ jobs:
         id: repo_owner_lower
         run: echo "REPO_OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
 
-      - name: Build and push source image
+      - name: Build and push source image (multi-arch)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.source
           push: true
-          tags: ghcr.io/${{ env.REPO_OWNER_LC }}/airbyte-connector-source:latest
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/${{ env.REPO_OWNER_LC }}/airbyte-connector-source:latest
+            ghcr.io/${{ env.REPO_OWNER_LC }}/airbyte-connector-source:amd64
+            ghcr.io/${{ env.REPO_OWNER_LC }}/airbyte-connector-source:arm64
 
-      - name: Build and push destination image
+      - name: Build and push destination image (multi-arch)
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Dockerfile.destination
           push: true
-          tags: ghcr.io/${{ env.REPO_OWNER_LC }}/airbyte-connector-destination:latest
+          platforms: linux/amd64,linux/arm64
+          tags: |
+            ghcr.io/${{ env.REPO_OWNER_LC }}/airbyte-connector-destination:latest
+            ghcr.io/${{ env.REPO_OWNER_LC }}/airbyte-connector-destination:amd64
+            ghcr.io/${{ env.REPO_OWNER_LC }}/airbyte-connector-destination:arm64
