@@ -1,0 +1,28 @@
+{
+  "streams": [
+    {
+      "stream": {
+        "name": "vertices_sample"
+      },
+      "config": {
+        "graph": "movie",
+        "setup_queries": [
+          "SESSION SET GRAPH movie"
+        ],
+        "read_query": "MATCH (v) RETURN v LIMIT 5"
+      }
+    },
+    {
+      "stream": {
+        "name": "edges_sample"
+      },
+      "config": {
+        "graph": "movie",
+        "setup_queries": [
+          "SESSION SET GRAPH movie"
+        ],
+        "read_query": "MATCH ()-[e]->() RETURN e LIMIT 5"
+      }
+    }
+  ]
+}

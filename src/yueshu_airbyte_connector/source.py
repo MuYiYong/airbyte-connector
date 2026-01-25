@@ -7,6 +7,7 @@ from .common import (
     DEFAULT_CHECK_QUERY,
     emit_message,
     log,
+    read_catalog_from_env,
     to_source_config,
 )
 from .nebula_client import NebulaClient, NebulaClientError
@@ -19,26 +20,13 @@ def spec() -> Dict[str, Any]:
             "documentationUrl": "",
             "connectionSpecification": {
                 "type": "object",
-                "required": ["host", "port", "username", "password"],
+                "required": ["username", "password"],
                 "properties": {
                     "host": {"type": "string"},
+                    "hosts": {"type": "array", "items": {"type": "string"}},
                     "port": {"type": "integer"},
                     "username": {"type": "string"},
                     "password": {"type": "string", "airbyte_secret": True},
-                    "graph": {"type": "string"},
-                    "check_query": {"type": "string"},
-                    "setup_queries": {"type": "array", "items": {"type": "string"}},
-                    "read_queries": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "required": ["name", "query"],
-                            "properties": {
-                                "name": {"type": "string"},
-                                "query": {"type": "string"},
-                            },
-                        },
-                    },
                 },
             },
         },
@@ -48,16 +36,14 @@ def spec() -> Dict[str, Any]:
 def check(config_data: Dict[str, Any]) -> None:
     cfg = to_source_config(config_data)
     client = NebulaClient(
-        host=cfg.host,
+        hosts=cfg.hosts,
         port=cfg.port,
         username=cfg.username,
         password=cfg.password,
-        graph=cfg.graph,
     )
     try:
         client.connect()
-        query = cfg.check_query or DEFAULT_CHECK_QUERY
-        client.execute(query)
+        client.execute(DEFAULT_CHECK_QUERY)
         emit_message(
             {
                 "type": "CONNECTION_STATUS",
@@ -76,12 +62,16 @@ def check(config_data: Dict[str, Any]) -> None:
 
 
 def discover(config_data: Dict[str, Any]) -> None:
-    cfg = to_source_config(config_data)
     streams: List[Dict[str, Any]] = []
-    for query in cfg.read_queries or []:
+    catalog = read_catalog_from_env() or {}
+    for stream_entry in catalog.get("streams", []):
+        stream_info = stream_entry.get("stream") or stream_entry
+        name = stream_info.get("name")
+        if not name:
+            continue
         streams.append(
             {
-                "name": query.name,
+                "name": name,
                 "supported_sync_modes": ["full_refresh"],
                 "json_schema": {
                     "type": "object",
@@ -96,34 +86,82 @@ def discover(config_data: Dict[str, Any]) -> None:
     emit_message({"type": "CATALOG", "catalog": {"streams": streams}})
 
 
+def _load_read_queries(config_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    catalog = read_catalog_from_env() or {}
+    queries: List[Dict[str, Any]] = []
+    for stream_entry in catalog.get("streams", []):
+        stream_info = stream_entry.get("stream") or stream_entry
+        name = stream_info.get("name")
+        if not name:
+            continue
+        config = stream_entry.get("config") or {}
+        query = config.get("read_query") or config.get("query")
+        if not query:
+            continue
+        queries.append(
+            {
+                "name": name,
+                "query": query,
+                "graph": config.get("graph"),
+                "setup_queries": config.get("setup_queries") or [],
+            }
+        )
+
+    if queries:
+        return queries
+
+    legacy = config_data.get("read_queries", [])
+    for item in legacy:
+        if not item:
+            continue
+        queries.append(
+            {
+                "name": item.get("name"),
+                "query": item.get("query"),
+                "graph": item.get("graph"),
+                "setup_queries": item.get("setup_queries") or [],
+            }
+        )
+    return queries
+
+
 def read(config_data: Dict[str, Any]) -> None:
     cfg = to_source_config(config_data)
-    if not cfg.read_queries:
-        raise ValueError("read_queries 不能为空")
+    read_queries = _load_read_queries(config_data)
+    if not read_queries:
+        raise ValueError("read_queries 不能为空，请在 AIRBYTE_CATALOG 的 stream config 中提供 read_query")
     client = NebulaClient(
-        host=cfg.host,
+        hosts=cfg.hosts,
         port=cfg.port,
         username=cfg.username,
         password=cfg.password,
-        graph=cfg.graph,
     )
     try:
         client.connect()
-        for query in cfg.setup_queries or []:
-            if query:
-                client.execute(query)
-        for idx, query in enumerate(cfg.read_queries):
-            log(f"执行读查询: {query.name}")
-            result = client.execute(query.query)
+        current_graph = None
+        for idx, query in enumerate(read_queries):
+            name = query.get("name")
+            gql = query.get("query")
+            if not name or not gql:
+                continue
+            graph = query.get("graph")
+            if graph and graph != current_graph:
+                client.execute(f"SESSION SET GRAPH {graph}")
+                current_graph = graph
+            for setup in query.get("setup_queries") or []:
+                if setup:
+                    client.execute(setup)
+            log(f"执行读查询: {name}")
+            result = client.execute(gql)
             payload = client.result_to_payload(result)
             emit_message(
                 {
                     "type": "RECORD",
                     "record": {
-                        "stream": query.name,
+                        "stream": name,
                         "data": {
                             "payload": payload,
-                            "query": query.query,
+                            "query": gql,
                             "index": idx,
                         },
                         "emitted_at": int(time.time() * 1000),

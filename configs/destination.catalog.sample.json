@@ -1,0 +1,30 @@
+{
+  "streams": [
+    {
+      "stream": {
+        "name": "movies"
+      },
+      "config": {
+        "graph": "movie",
+        "setup_queries": [
+          "SESSION SET GRAPH movie"
+        ],
+        "write_query_template": "TABLE INSERT (@Movie{id:{movie_id}, name:\"{movie_name}\"})",
+        "write_mode": "insert or replace"
+      }
+    },
+    {
+      "stream": {
+        "name": "acts"
+      },
+      "config": {
+        "graph": "movie",
+        "setup_queries": [
+          "SESSION SET GRAPH movie"
+        ],
+        "write_query_template": "TABLE t { actor_id, movie_id, movie_name } = ( {actor_id}, {movie_id}, \"{movie_name}\" )\nUSE movie\nFOR re IN t\nMATCH (a@Actor) WHERE a.id = re.actor_id\nINSERT (a)-[@Act]->(@Movie {id: re.movie_id, name: re.movie_name})",
+        "write_mode": "insert or update"
+      }
+    }
+  ]
+}

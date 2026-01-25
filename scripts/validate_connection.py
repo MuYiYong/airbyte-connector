@@ -16,7 +16,7 @@ def main() -> int:
     graph = os.environ.get("YUESHU_GRAPH")
     check_query = os.environ.get("YUESHU_CHECK_QUERY", DEFAULT_CHECK_QUERY)
 
-    client = NebulaClient(host=host, port=port, username=username, password=password, graph=graph)
+    client = NebulaClient(hosts=[host], port=port, username=username, password=password, graph=graph)
     try:
         client.connect()
         result = client.execute(check_query)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import importlib
-from typing import Any, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from .common import log
 
@@ -30,13 +30,13 @@ def _import_pool() -> Tuple[str, Any, Any]:
 class NebulaClient:
     def __init__(
         self,
-        host: str,
-        port: int,
+        hosts: List[str],
+        port: Optional[int],
         username: str,
         password: str,
         graph: Optional[str] = None,
     ) -> None:
-        self._host = host
+        self._hosts = hosts
         self._port = port
         self._username = username
         self._password = password
@@ -53,8 +53,16 @@ class NebulaClient:
         elif hasattr(config, "max_conn_pool_size"):
             config.max_conn_pool_size = 5
 
+        host_list = []
+        for host in self._hosts:
+            if ":" in host:
+                host_list.append(host)
+                continue
+            if self._port is None:
+                raise NebulaClientError("未提供 port，且 host 未包含端口")
+            host_list.append(f"{host}:{self._port}")
         self._pool = pool_cls(
-            hosts=[f"{self._host}:{self._port}"],
+            hosts=host_list,
             username=self._username,
             password=self._password,
             pool_config=config,

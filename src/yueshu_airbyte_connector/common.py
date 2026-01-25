@@ -9,36 +9,20 @@ from typing import Any, Dict, Iterable, List, Optional
 
 @dataclass
 class ConnectionConfig:
-    host: str
-    port: int
+    hosts: List[str]
+    port: Optional[int]
     username: str
     password: str
-    graph: Optional[str] = None
-    check_query: Optional[str] = None
-    setup_queries: Optional[List[str]] = None
-
-
-@dataclass
-class ReadQuery:
-    name: str
-    query: str
-
-
-@dataclass
-class WriteQuery:
-    stream: str
-    query_template: str
-    write_mode: Optional[str] = None
 
 
 @dataclass
 class SourceConfig(ConnectionConfig):
-    read_queries: List[ReadQuery] = None
+    pass
 
 
 @dataclass
 class DestinationConfig(ConnectionConfig):
-    write_queries: List[WriteQuery] = None
+    pass
 
 
 DEFAULT_CHECK_QUERY = "SHOW CURRENT_USER"
@@ -58,6 +42,13 @@ def read_config_from_env_or_path(config_path: Optional[str]) -> Dict[str, Any]:
     raise ValueError("Missing config: provide --config or AIRBYTE_CONFIG")
 
 
+def read_catalog_from_env() -> Optional[Dict[str, Any]]:
+    raw = os.environ.get("AIRBYTE_CATALOG")
+    if not raw:
+        return None
+    return json.loads(raw)
+
+
 def json_dumps(data: Dict[str, Any]) -> str:
     return json.dumps(data, ensure_ascii=False)
 
@@ -73,31 +64,37 @@ def log(message: str) -> None:
 
 
 def to_source_config(data: Dict[str, Any]) -> SourceConfig:
-    read_queries = [ReadQuery(**item) for item in data.get("read_queries", [])]
+    hosts = _normalize_hosts(data)
     return SourceConfig(
-        host=data["host"],
-        port=int(data["port"]),
+        hosts=hosts,
+        port=int(data["port"]) if data.get("port") is not None else None,
         username=data["username"],
         password=data["password"],
-        graph=data.get("graph"),
-        check_query=data.get("check_query"),
-        setup_queries=data.get("setup_queries", []),
-        read_queries=read_queries,
     )
 
 
 def to_destination_config(data: Dict[str, Any]) -> DestinationConfig:
-    write_queries = [WriteQuery(**item) for item in data.get("write_queries", [])]
+    hosts = _normalize_hosts(data)
     return DestinationConfig(
-        host=data["host"],
-        port=int(data["port"]),
+        hosts=hosts,
+        port=int(data["port"]) if data.get("port") is not None else None,
         username=data["username"],
         password=data["password"],
-        graph=data.get("graph"),
-        check_query=data.get("check_query"),
-        setup_queries=data.get("setup_queries", []),
-        write_queries=write_queries,
     )
+
+
+def _normalize_hosts(data: Dict[str, Any]) -> List[str]:
+    hosts = data.get("hosts")
+    if isinstance(hosts, list) and hosts:
+        return [str(item) for item in hosts if item]
+
+    host = data.get("host")
+    if isinstance(host, list):
+        return [str(item) for item in host if item]
+    if isinstance(host, str) and host:
+        return [host]
+
+    raise ValueError("必须提供 host 或 hosts")
 
 
 def iter_airbyte_messages(stdin: Iterable[str]) -> Iterable[Dict[str, Any]]:

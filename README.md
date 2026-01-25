@@ -8,20 +8,21 @@
 - `Dockerfile.source` / `Dockerfile.destination`：Docker 构建入口
 
 ## 配置说明（通用）
-通用连接字段：
-- `host` / `port`
+连接器配置（仅连接信息）：
+- `host` 或 `hosts` / `port`（可选；若使用 `host:port` 可省略 `port`）
 - `username` / `password`
-- `graph`（可选，若需要指定工作图）
-- `check_query`（可选，默认 `SHOW CURRENT_USER`）
-- `setup_queries`（可选，连接后执行的初始化语句列表）
+
+连接级别配置（Catalog/stream config）：
+- `graph`：图名（可选）
+- `setup_queries`：预置语句（可选，首次使用该 stream 时执行）
+- Source：`read_query`
+- Destination：`write_query_template` 与 `write_mode`
 
 ### Source 配置
-额外字段：
-- `read_queries`: 读取查询数组，每项包含 `name` 与 `query`
-
 读取结果会以单条记录输出，字段包含 `payload`（结果字符串）、`query` 与 `index`。
 
-示例配置文件：`configs/source.sample.json`（使用图 `movie`）。
+示例连接配置文件：`configs/source.sample.json`。
+示例 Catalog 配置文件：`configs/source.catalog.sample.json`。
 
 示例查询（来自本地文档中的 MATCH 示例）：
 - `SESSION SET GRAPH movie`
@@ -29,9 +30,6 @@
 - `MATCH ()-[e]->() RETURN e LIMIT 5`
 
 ### Destination 配置
-额外字段：
-- `write_queries`: 写入规则数组，每项包含 `stream` 与 `query_template`，可选 `write_mode`
-
 `write_mode` 支持以下更新模式：
 - `insert`
 - `insert or replace`
@@ -40,9 +38,10 @@
 
 写入时会优先使用 **table insert** 或 **table match insert** 语法；若模板为普通 `INSERT`/`MATCH ... INSERT`，会自动补齐为 `TABLE INSERT`/`TABLE MATCH ... INSERT` 并应用 `write_mode`。
 
-当接收到对应 `stream` 的 `RECORD` 消息时，会把 `query_template` 中的 `{字段名}` 替换为记录中的字段值并执行。
+当接收到对应 `stream` 的 `RECORD` 消息时，会把 `write_query_template` 中的 `{字段名}` 替换为记录中的字段值并执行。
 
-示例配置文件：`configs/destination.sample.json`（使用图 `movie`）。
+示例连接配置文件：`configs/destination.sample.json`。
+示例 Catalog 配置文件：`configs/destination.catalog.sample.json`。
 
 示例写入语句（来自本地文档中的 INSERT 示例）：
 - `SESSION SET GRAPH movie`
@@ -151,7 +150,8 @@ airbyte-worker:
 ### 4) 在 UI 中创建连接
 1. 打开 Airbyte UI，创建 **Source** 或 **Destination**。
 2. 在连接器列表中选择上一步注册的 `yueshu-airbyte-source` 或 `yueshu-airbyte-destination`。
-3. 按照 `configs/source.sample.json` 或 `configs/destination.sample.json` 的字段填写配置。
+3. 按照 `configs/source.sample.json` 或 `configs/destination.sample.json` 的字段填写连接配置。
+4. 在连接的 Catalog/stream config 中填写 `graph`、`setup_queries` 与读/写模板（参考 `configs/*.catalog.sample.json`）。
 4. 点击 **Test** 验证连接，创建并运行同步任务。
 
 ### 5) 常见问题
