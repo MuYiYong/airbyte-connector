@@ -1,0 +1,61 @@
+name: CI & Publish Docker
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[dev]
+
+      - name: Run tests
+        run: |
+          pytest tests/
+
+  build-and-push-docker:
+    needs: build-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push source image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.source
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/airbyte-connector-source:latest
+
+      - name: Build and push destination image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.destination
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/airbyte-connector-destination:latest
