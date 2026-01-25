@@ -7,4 +7,5 @@ COPY src /app/src
 RUN pip install --no-cache-dir .
 
 ENV CONNECTOR_TYPE=destination
+ENV AIRBYTE_ENTRYPOINT="yueshu-airbyte"
 ENTRYPOINT ["yueshu-airbyte"]
