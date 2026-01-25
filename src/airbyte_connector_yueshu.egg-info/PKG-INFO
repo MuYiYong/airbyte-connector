@@ -1,0 +1,79 @@
+Metadata-Version: 2.4
+Name: airbyte-connector-yueshu
+Version: 0.1.0
+Summary: Airbyte source and destination connector for Yueshu Graph 5.2 using nebula5-python
+Author: Vesoft
+License: Apache-2.0
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: nebula5-python>=5.2.0
+Provides-Extra: dev
+Requires-Dist: pytest>=7.4; extra == "dev"
+
+# 悦数图数据库 5.2 Airbyte 连接器（Source + Destination）
+
+本项目实现了同时支持 Source 与 Destination 的 Airbyte 连接器，使用 `nebula5-python` SDK 连接悦数图数据库 5.2。
+
+## 目录
+- `src/yueshu_airbyte_connector`：连接器实现
+- `scripts/validate_connection.py`：连接验证脚本
+- `Dockerfile.source` / `Dockerfile.destination`：Docker 构建入口
+
+## 配置说明（通用）
+通用连接字段：
+- `host` / `port`
+- `username` / `password`
+- `graph`（可选，若需要指定工作图）
+- `check_query`（可选，默认 `SHOW CURRENT_USER`）
+- `setup_queries`（可选，连接后执行的初始化语句列表）
+
+### Source 配置
+额外字段：
+- `read_queries`: 读取查询数组，每项包含 `name` 与 `query`
+
+读取结果会以单条记录输出，字段包含 `payload`（结果字符串）、`query` 与 `index`。
+
+示例配置文件：`configs/source.sample.json`（使用图 `movie`）。
+
+示例查询（来自本地文档中的 MATCH 示例）：
+- `SESSION SET GRAPH ETH`
+- `MATCH (v) RETURN v LIMIT 5`
+- `MATCH ()-[e]->() RETURN e LIMIT 5`
+
+### Destination 配置
+额外字段：
+- `write_queries`: 写入规则数组，每项包含 `stream` 与 `query_template`
+
+当接收到对应 `stream` 的 `RECORD` 消息时，会把 `query_template` 中的 `{字段名}` 替换为记录中的字段值并执行。
+
+示例配置文件：`configs/destination.sample.json`（使用图 `movie`）。
+
+示例写入语句（来自本地文档中的 INSERT 示例）：
+- `SESSION SET GRAPH ETH`
+- `INSERT (@Actor{id:{id}, name:"{name}", birthDate:date("{birth_date}")})`
+- `MATCH (n@Actor{id:{src_id}}), (m@Movie{id:{dst_id}}) INSERT (n)-[@Act]->(m)`
+
+提示：请确保图 `movie` 中已存在对应点类型/标签与边类型（如 `Actor`、`Movie`、`Act`）。
+
+## 运行方式（本地）
+入口命令：`yueshu-airbyte`。
+
+示例：
+- 读取 Source 规范：`yueshu-airbyte --connector-type source --command spec`
+- 校验连接：`yueshu-airbyte --connector-type source --command check --config <config.json>`
+- 读取数据：`yueshu-airbyte --connector-type source --command read --config <config.json>`
+- 写入数据：`yueshu-airbyte --connector-type destination --command write --config <config.json>`
+
+## Docker
+- Source 镜像入口使用 `CONNECTOR_TYPE=source`
+- Destination 镜像入口使用 `CONNECTOR_TYPE=destination`
+
+## 验证测试
+已提供验证脚本：`scripts/validate_connection.py`。
+脚本默认使用以下环境变量（可覆盖）：
+- `YUESHU_HOST`（默认 192.168.15.240）
+- `YUESHU_PORT`（默认 39669）
+- `YUESHU_USERNAME`（默认 root）
+- `YUESHU_PASSWORD`（默认 Nebula123）
+- `YUESHU_GRAPH`（可选）
+- `YUESHU_CHECK_QUERY`（默认 `SHOW CURRENT_USER`）

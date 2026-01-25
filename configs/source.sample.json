@@ -1,0 +1,21 @@
+{
+  "host": "192.168.15.240",
+  "port": 39669,
+  "username": "root",
+  "password": "Nebula123",
+  "graph": "movie",
+  "check_query": "SHOW CURRENT_USER",
+  "setup_queries": [
+    "SESSION SET GRAPH movie"
+  ],
+  "read_queries": [
+    {
+      "name": "vertices_sample",
+      "query": "MATCH (v) RETURN v LIMIT 5"
+    },
+    {
+      "name": "edges_sample",
+      "query": "MATCH ()-[e]->() RETURN e LIMIT 5"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+airbyte-server:
+  extraEnv:
+    - name: AIRBYTE_CUSTOM_CONNECTOR_CONFIGS
+      value: >-
+        [{"name":"yueshu-airbyte-source","dockerRepository":"yueshu-airbyte-source","dockerImageTag":"local"},
+         {"name":"yueshu-airbyte-destination","dockerRepository":"yueshu-airbyte-destination","dockerImageTag":"local"}]
+
+airbyte-worker:
+  extraEnv:
+    - name: AIRBYTE_CUSTOM_CONNECTOR_CONFIGS
+      value: >-
+        [{"name":"yueshu-airbyte-source","dockerRepository":"yueshu-airbyte-source","dockerImageTag":"local"},
+         {"name":"yueshu-airbyte-destination","dockerRepository":"yueshu-airbyte-destination","dockerImageTag":"local"}]

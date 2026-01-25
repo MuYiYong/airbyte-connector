@@ -1,0 +1,28 @@
+{
+  "host": "192.168.15.240",
+  "port": 39669,
+  "username": "root",
+  "password": "Nebula123",
+  "graph": "movie",
+  "check_query": "SHOW CURRENT_USER",
+  "setup_queries": [
+    "SESSION SET GRAPH movie"
+  ],
+  "write_queries": [
+    {
+      "stream": "actors",
+      "query_template": "TABLE INSERT (@Actor{{id:{id}, name:\"{name}\", birthDate:date(\"{birth_date}\")}})",
+      "write_mode": "insert or ignore"
+    },
+    {
+      "stream": "movies",
+      "query_template": "TABLE INSERT (@Movie{{id:{id}, name:\"{name}\"}})",
+      "write_mode": "insert or replace"
+    },
+    {
+      "stream": "acts",
+      "query_template": "TABLE MATCH (n@Actor{{id:{src_id}}}), (m@Movie{{id:{dst_id}}}) INSERT (n)-[@Act]->(m)",
+      "write_mode": "insert or update"
+    }
+  ]
+}
