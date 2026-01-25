@@ -1,3 +1,7 @@
+      - name: Debug repo owner
+        run: |
+          echo "GITHUB_REPOSITORY_OWNER=$GITHUB_REPOSITORY_OWNER"
+          echo "REPO_OWNER_LC=${REPO_OWNER_LC}"
 name: CI & Publish Docker
 
 on:
