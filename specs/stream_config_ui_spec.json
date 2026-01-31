@@ -1,0 +1,420 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Stream Mapping Configuration",
+    "description": "配置源表到图数据库的映射关系",
+    "type": "object",
+    "required": [
+        "graph",
+        "mapping_type"
+    ],
+    "properties": {
+        "graph": {
+            "type": "string",
+            "title": "图空间",
+            "description": "选择目标图空间名称",
+            "order": 0,
+            "airbyte_ui": {
+                "type": "text",
+                "placeholder": "例如: movie"
+            }
+        },
+        "mapping_type": {
+            "type": "string",
+            "title": "映射类型",
+            "description": "选择将源表映射为点表还是边表",
+            "enum": [
+                "vertex",
+                "edge"
+            ],
+            "default": "vertex",
+            "order": 1,
+            "airbyte_ui": {
+                "type": "radio",
+                "options": [
+                    {
+                        "value": "vertex",
+                        "label": "点表 (Vertex)",
+                        "description": "将源表映射为图中的点"
+                    },
+                    {
+                        "value": "edge",
+                        "label": "边表 (Edge)",
+                        "description": "将源表映射为图中的边"
+                    }
+                ]
+            }
+        }
+    },
+    "allOf": [
+        {
+            "if": {
+                "properties": {
+                    "mapping_type": {
+                        "const": "vertex"
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "vertex_label": {
+                        "type": "string",
+                        "title": "点类型标签",
+                        "description": "目标图中的点类型名称",
+                        "order": 2,
+                        "airbyte_ui": {
+                            "type": "text",
+                            "placeholder": "例如: Actor"
+                        }
+                    },
+                    "vertex_primary_key": {
+                        "type": "object",
+                        "title": "主键映射",
+                        "description": "选择源表字段作为点的主键",
+                        "order": 3,
+                        "required": [
+                            "source_field",
+                            "dest_field"
+                        ],
+                        "properties": {
+                            "source_field": {
+                                "type": "string",
+                                "title": "源表主键字段",
+                                "description": "从源表字段中选择",
+                                "airbyte_ui": {
+                                    "type": "select",
+                                    "source": "stream_fields"
+                                }
+                            },
+                            "dest_field": {
+                                "type": "string",
+                                "title": "目标点主键字段",
+                                "description": "目标图点表中的主键字段名",
+                                "airbyte_ui": {
+                                    "type": "text",
+                                    "placeholder": "例如: id"
+                                }
+                            }
+                        }
+                    },
+                    "vertex_properties": {
+                        "type": "array",
+                        "title": "属性字段映射",
+                        "description": "选择源表字段映射为点的属性（可选）",
+                        "order": 4,
+                        "items": {
+                            "type": "object",
+                            "required": [
+                                "source_field",
+                                "dest_field"
+                            ],
+                            "properties": {
+                                "source_field": {
+                                    "type": "string",
+                                    "title": "源表字段",
+                                    "airbyte_ui": {
+                                        "type": "select",
+                                        "source": "stream_fields"
+                                    }
+                                },
+                                "dest_field": {
+                                    "type": "string",
+                                    "title": "目标属性名",
+                                    "airbyte_ui": {
+                                        "type": "text",
+                                        "placeholder": "例如: name"
+                                    }
+                                },
+                                "transform": {
+                                    "type": "string",
+                                    "title": "类型转换",
+                                    "enum": [
+                                        "",
+                                        "date",
+                                        "datetime",
+                                        "timestamp"
+                                    ],
+                                    "default": "",
+                                    "airbyte_ui": {
+                                        "type": "select",
+                                        "options": [
+                                            {
+                                                "value": "",
+                                                "label": "无转换"
+                                            },
+                                            {
+                                                "value": "date",
+                                                "label": "Date - 日期"
+                                            },
+                                            {
+                                                "value": "datetime",
+                                                "label": "DateTime - 日期时间"
+                                            },
+                                            {
+                                                "value": "timestamp",
+                                                "label": "Timestamp - 时间戳"
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        },
+                        "airbyte_ui": {
+                            "type": "array_editor",
+                            "addButtonText": "+ 添加属性字段",
+                            "itemLabel": "属性 {index}"
+                        }
+                    }
+                },
+                "required": [
+                    "vertex_label",
+                    "vertex_primary_key"
+                ]
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "mapping_type": {
+                        "const": "edge"
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "edge_label": {
+                        "type": "string",
+                        "title": "边类型标签",
+                        "description": "目标图中的边类型名称",
+                        "order": 2,
+                        "airbyte_ui": {
+                            "type": "text",
+                            "placeholder": "例如: Act"
+                        }
+                    },
+                    "edge_src_vertex": {
+                        "type": "object",
+                        "title": "起点配置",
+                        "description": "配置边的起点信息",
+                        "order": 3,
+                        "required": [
+                            "label",
+                            "primary_key_source",
+                            "primary_key_dest"
+                        ],
+                        "properties": {
+                            "label": {
+                                "type": "string",
+                                "title": "起点类型",
+                                "description": "起点的点类型标签",
+                                "airbyte_ui": {
+                                    "type": "text",
+                                    "placeholder": "例如: Actor"
+                                }
+                            },
+                            "primary_key_source": {
+                                "type": "string",
+                                "title": "源表起点主键字段",
+                                "description": "从源表字段中选择",
+                                "airbyte_ui": {
+                                    "type": "select",
+                                    "source": "stream_fields"
+                                }
+                            },
+                            "primary_key_dest": {
+                                "type": "string",
+                                "title": "目标图起点主键",
+                                "description": "目标图中起点的主键字段名",
+                                "airbyte_ui": {
+                                    "type": "text",
+                                    "placeholder": "例如: id"
+                                }
+                            }
+                        }
+                    },
+                    "edge_dst_vertex": {
+                        "type": "object",
+                        "title": "终点配置",
+                        "description": "配置边的终点信息",
+                        "order": 4,
+                        "required": [
+                            "label",
+                            "primary_key_source",
+                            "primary_key_dest"
+                        ],
+                        "properties": {
+                            "label": {
+                                "type": "string",
+                                "title": "终点类型",
+                                "description": "终点的点类型标签",
+                                "airbyte_ui": {
+                                    "type": "text",
+                                    "placeholder": "例如: Movie"
+                                }
+                            },
+                            "primary_key_source": {
+                                "type": "string",
+                                "title": "源表终点主键字段",
+                                "description": "从源表字段中选择",
+                                "airbyte_ui": {
+                                    "type": "select",
+                                    "source": "stream_fields"
+                                }
+                            },
+                            "primary_key_dest": {
+                                "type": "string",
+                                "title": "目标图终点主键",
+                                "description": "目标图中终点的主键字段名",
+                                "airbyte_ui": {
+                                    "type": "text",
+                                    "placeholder": "例如: id"
+                                }
+                            }
+                        }
+                    },
+                    "edge_multiedge_key": {
+                        "type": "object",
+                        "title": "多边键配置（可选）",
+                        "description": "如果同一起点和终点间可以有多条边，需要配置多边键",
+                        "order": 5,
+                        "properties": {
+                            "enabled": {
+                                "type": "boolean",
+                                "title": "启用多边键",
+                                "default": false,
+                                "airbyte_ui": {
+                                    "type": "checkbox"
+                                }
+                            },
+                            "source_field": {
+                                "type": "string",
+                                "title": "多边键字段",
+                                "description": "从源表字段中选择作为 ranking 的字段",
+                                "airbyte_ui": {
+                                    "type": "select",
+                                    "source": "stream_fields",
+                                    "condition": {
+                                        "field": "enabled",
+                                        "value": true
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "edge_properties": {
+                        "type": "array",
+                        "title": "边属性映射",
+                        "description": "选择源表字段映射为边的属性（可选）",
+                        "order": 6,
+                        "items": {
+                            "type": "object",
+                            "required": [
+                                "source_field",
+                                "dest_field"
+                            ],
+                            "properties": {
+                                "source_field": {
+                                    "type": "string",
+                                    "title": "源表字段",
+                                    "airbyte_ui": {
+                                        "type": "select",
+                                        "source": "stream_fields"
+                                    }
+                                },
+                                "dest_field": {
+                                    "type": "string",
+                                    "title": "目标属性名",
+                                    "airbyte_ui": {
+                                        "type": "text",
+                                        "placeholder": "例如: roleName"
+                                    }
+                                },
+                                "transform": {
+                                    "type": "string",
+                                    "title": "类型转换",
+                                    "enum": [
+                                        "",
+                                        "date",
+                                        "datetime",
+                                        "timestamp"
+                                    ],
+                                    "default": "",
+                                    "airbyte_ui": {
+                                        "type": "select",
+                                        "options": [
+                                            {
+                                                "value": "",
+                                                "label": "无转换"
+                                            },
+                                            {
+                                                "value": "date",
+                                                "label": "Date - 日期"
+                                            },
+                                            {
+                                                "value": "datetime",
+                                                "label": "DateTime - 日期时间"
+                                            },
+                                            {
+                                                "value": "timestamp",
+                                                "label": "Timestamp - 时间戳"
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        },
+                        "airbyte_ui": {
+                            "type": "array_editor",
+                            "addButtonText": "+ 添加属性字段",
+                            "itemLabel": "属性 {index}"
+                        }
+                    }
+                },
+                "required": [
+                    "edge_label",
+                    "edge_src_vertex",
+                    "edge_dst_vertex"
+                ]
+            }
+        }
+    ],
+    "properties": {
+        "write_mode": {
+            "type": "string",
+            "title": "写入模式",
+            "description": "选择数据写入策略",
+            "enum": [
+                "insert",
+                "insert or replace",
+                "insert or ignore",
+                "insert or update"
+            ],
+            "default": "insert or ignore",
+            "order": 10,
+            "airbyte_ui": {
+                "type": "select",
+                "options": [
+                    {
+                        "value": "insert",
+                        "label": "Insert - 仅插入",
+                        "description": "如果记录已存在则报错"
+                    },
+                    {
+                        "value": "insert or replace",
+                        "label": "Insert or Replace - 插入或替换",
+                        "description": "替换整条记录"
+                    },
+                    {
+                        "value": "insert or ignore",
+                        "label": "Insert or Ignore - 插入或忽略",
+                        "description": "如果记录已存在则跳过"
+                    },
+                    {
+                        "value": "insert or update",
+                        "label": "Insert or Update - 插入或更新",
+                        "description": "合并更新属性"
+                    }
+                ]
+            }
+        }
+    }
+}

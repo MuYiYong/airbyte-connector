@@ -11,6 +11,10 @@ from .common import (
     read_catalog_from_env,
     to_destination_config,
 )
+from .gql_generator import (
+    generate_gql_from_mapping,
+    transform_flat_config_to_mapping,
+)
 from .nebula_client import NebulaClient, NebulaClientError
 
 
@@ -21,13 +25,11 @@ def spec() -> Dict[str, Any]:
             "documentationUrl": "",
             "connectionSpecification": {
                 "type": "object",
-                "required": ["username", "password"],
+                "required": ["hosts", "username", "password"],
                 "properties": {
-                    "host": {"type": "string"},
                     "hosts": {"type": "array", "items": {"type": "string"}},
-                    "port": {"type": "integer"},
-                    "username": {"type": "string"},
-                    "password": {"type": "string", "airbyte_secret": True},
+                    "username": {"type": "string", "default": "root"},
+                    "password": {"type": "string", "airbyte_secret": True, "default": "root"},
                 },
             },
         },
@@ -38,7 +40,6 @@ def check(config_data: Dict[str, Any]) -> None:
     cfg = to_destination_config(config_data)
     client = NebulaClient(
         hosts=cfg.hosts,
-        port=cfg.port,
         username=cfg.username,
         password=cfg.password,
     )
@@ -60,13 +61,6 @@ def check(config_data: Dict[str, Any]) -> None:
         )
     finally:
         client.close()
-
-
-def _apply_template(template: str, record: Dict[str, Any]) -> str:
-    try:
-        return template.format(**record)
-    except Exception:
-        return template
 
 
 _WRITE_MODE_MAP = {
@@ -111,6 +105,12 @@ def _apply_table_insert(query: str, write_mode: str | None) -> str:
 
 
 def _load_write_map(config_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    """
+    Load write configuration from catalog.
+    Supports two mapping formats:
+    1. Mapping-based (hierarchical) - preferred
+    2. Mapping-based (flat) - auto-converted to hierarchical
+    """
     catalog = read_catalog_from_env() or {}
     write_map: Dict[str, Dict[str, Any]] = {}
 
@@ -119,34 +119,33 @@ def _load_write_map(config_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         name = stream_info.get("name")
         if not name:
             continue
+        
         config = stream_entry.get("config") or {}
-        template = config.get("write_query_template") or config.get("query_template")
-        if not template:
+        
+        # Priority 1: Check for mapping-based configuration (hierarchical format)
+        if "mapping" in config:
+            write_map[name] = {
+                "mapping_config": {
+                    "graph": config.get("graph"),
+                    "mapping": config["mapping"],
+                    "write_mode": config.get("write_mode", "insert or ignore"),
+                },
+                "graph": config.get("graph"),
+                "setup_queries": config.get("setup_queries") or [],
+            }
             continue
-        write_map[name] = {
-            "query_template": template,
-            "write_mode": config.get("write_mode"),
-            "graph": config.get("graph"),
-            "setup_queries": config.get("setup_queries") or [],
-        }
+        
+        # Priority 2: Check for flat mapping configuration
+        if "mapping_type" in config:
+            # Transform flat config to standard mapping format
+            mapping_config = transform_flat_config_to_mapping(config)
+            write_map[name] = {
+                "mapping_config": mapping_config,
+                "graph": config.get("graph"),
+                "setup_queries": config.get("setup_queries") or [],
+            }
+            continue
 
-    if write_map:
-        return write_map
-
-    legacy = config_data.get("write_queries", [])
-    for item in legacy:
-        if not item:
-            continue
-        name = item.get("stream")
-        template = item.get("query_template")
-        if not name or not template:
-            continue
-        write_map[name] = {
-            "query_template": template,
-            "write_mode": item.get("write_mode"),
-            "graph": item.get("graph"),
-            "setup_queries": item.get("setup_queries") or [],
-        }
     return write_map
 
 
@@ -154,10 +153,11 @@ def write(config_data: Dict[str, Any], stdin: Iterable[str]) -> None:
     cfg = to_destination_config(config_data)
     write_map = _load_write_map(config_data)
     if not write_map:
-        raise ValueError("write_queries 不能为空，请在 AIRBYTE_CATALOG 的 stream config 中提供 write_query_template")
+        raise ValueError(
+            "配置不能为空，请在 AIRBYTE_CATALOG 的 stream config 中提供 mapping 配置"
+        )
     client = NebulaClient(
         hosts=cfg.hosts,
-        port=cfg.port,
         username=cfg.username,
         password=cfg.password,
     )
@@ -174,19 +174,35 @@ def write(config_data: Dict[str, Any], stdin: Iterable[str]) -> None:
             write_item = write_map.get(stream)
             if not write_item:
                 continue
+            
+            # Handle graph switching
             graph = write_item.get("graph")
             if graph and graph != current_graph:
                 client.execute(f"SESSION SET GRAPH {graph}")
                 current_graph = graph
+            
+            # Execute setup queries once per stream
             if stream not in initialized_streams:
                 for query in write_item.get("setup_queries") or []:
                     if query:
                         client.execute(query)
                 initialized_streams.add(stream)
-            gql = _apply_template(write_item.get("query_template", ""), data)
-            gql = _apply_table_insert(gql, write_item.get("write_mode"))
-            log(f"写入流 {stream}")
+            
+            # Use mapping-based GQL generation
+            mapping_config = write_item.get("mapping_config", {})
+            try:
+                gql = generate_gql_from_mapping(mapping_config, data)
+                write_mode = mapping_config.get("write_mode")
+            except Exception as e:
+                log(f"生成 GQL 失败: {e}, stream={stream}, data={data}")
+                raise ValueError(f"GQL 生成失败 (stream: {stream}): {e}")
+            
+            # Apply write mode
+            gql = _apply_table_insert(gql, write_mode)
+            
+            log(f"写入流 {stream}: {gql}")
             client.execute(gql)
+        
         emit_message({"type": "STATE", "state": {"last_write": True}})
     finally:
         client.close()

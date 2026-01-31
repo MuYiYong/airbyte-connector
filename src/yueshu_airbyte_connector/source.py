@@ -20,13 +20,11 @@ def spec() -> Dict[str, Any]:
             "documentationUrl": "",
             "connectionSpecification": {
                 "type": "object",
-                "required": ["username", "password"],
+                "required": ["hosts", "username", "password"],
                 "properties": {
-                    "host": {"type": "string"},
                     "hosts": {"type": "array", "items": {"type": "string"}},
-                    "port": {"type": "integer"},
-                    "username": {"type": "string"},
-                    "password": {"type": "string", "airbyte_secret": True},
+                    "username": {"type": "string", "default": "root"},
+                    "password": {"type": "string", "airbyte_secret": True, "default": "root"},
                 },
             },
         },
@@ -37,7 +35,6 @@ def check(config_data: Dict[str, Any]) -> None:
     cfg = to_source_config(config_data)
     client = NebulaClient(
         hosts=cfg.hosts,
-        port=cfg.port,
         username=cfg.username,
         password=cfg.password,
     )
@@ -132,7 +129,6 @@ def read(config_data: Dict[str, Any]) -> None:
         raise ValueError("read_queries 不能为空，请在 AIRBYTE_CATALOG 的 stream config 中提供 read_query")
     client = NebulaClient(
         hosts=cfg.hosts,
-        port=cfg.port,
         username=cfg.username,
         password=cfg.password,
     )

@@ -1,0 +1,42 @@
+{
+    "documentationUrl": "https://github.com/your-org/yueshu-airbyte-connector",
+    "connectionSpecification": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "title": "悦数图数据库 Destination Spec",
+        "type": "object",
+        "required": [
+            "hosts"
+        ],
+        "properties": {
+            "hosts": {
+                "type": "array",
+                "title": "图数据库地址",
+                "description": "nebula 图数据库的连接地址列表，格式为 host:port",
+                "items": {
+                    "type": "string",
+                    "pattern": "^[^:]+:[0-9]+$",
+                    "examples": [
+                        "192.168.15.240:39669"
+                    ]
+                },
+                "minItems": 1,
+                "order": 0
+            },
+            "user": {
+                "type": "string",
+                "title": "用户名",
+                "description": "数据库用户名",
+                "default": "root",
+                "order": 1
+            },
+            "password": {
+                "type": "string",
+                "title": "密码",
+                "description": "数据库密码",
+                "default": "root",
+                "airbyte_secret": true,
+                "order": 2
+            }
+        }
+    }
+}

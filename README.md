@@ -9,8 +9,8 @@
 
 ## 配置说明（通用）
 连接器配置（仅连接信息）：
-- `host` 或 `hosts` / `port`（可选；若使用 `host:port` 可省略 `port`）
-- `username` / `password`
+- `hosts`（仅支持 `host:port` 形式，可多组）
+- `username` / `password`（默认 `root` / `root`）
 
 连接级别配置（Catalog/stream config）：
 - `graph`：图名（可选）
@@ -30,32 +30,48 @@
 - `MATCH ()-[e]->() RETURN e LIMIT 5`
 
 ### Destination 配置
+
+**推荐使用 Mapping 配置方式**（自动生成 GQL）
+
+连接器支持两种配置方式：
+1. **Mapping-based**（推荐）- 通过配置映射关系自动生成 GQL
+2. **Template-based**（传统）- 手动编写 GQL 模板（仅向后兼容）
+
+#### Mapping 配置方式
+
+##### 点表映射（Vertex）
+配置源表到图数据库点表的映射：
+- 选择源表字段作为点的主键
+- 选择其他字段作为点的属性（可选）
+- 支持数据类型转换（date, datetime, timestamp）
+
+##### 边表映射（Edge）
+配置源表到图数据库边表的映射：
+- 选择源表字段作为起点主键
+- 选择源表字段作为终点主键
+- 选择源表字段作为多边键/ranking（可选）
+- 选择其他字段作为边的属性（可选）
+- 支持数据类型转换
+
+#### Write Mode 更新模式
 `write_mode` 支持以下更新模式：
-- `insert`
-- `insert or replace`
-- `insert or ignore`（默认）
-- `insert or update`
+- `insert` - 仅插入，记录已存在则报错
+- `insert or replace` - 插入或替换整条记录
+- `insert or ignore` - 插入或忽略（默认）
+- `insert or update` - 插入或合并更新属性
 
-写入时会优先使用 **table insert** 或 **table match insert** 语法；若模板为普通 `INSERT`/`MATCH ... INSERT`，会自动补齐为 `TABLE INSERT`/`TABLE MATCH ... INSERT` 并应用 `write_mode`。
+写入时会自动使用 **TABLE INSERT** 或 **TABLE MATCH INSERT** 语法，并应用配置的 `write_mode`。
 
-当接收到对应 `stream` 的 `RECORD` 消息时，会把 `write_query_template` 中的 `{字段名}` 替换为记录中的字段值并执行。
+#### 配置文件示例
 
-示例连接配置文件：`configs/destination.sample.json`。
-示例 Catalog 配置文件：`configs/destination.catalog.sample.json`。
+示例连接配置文件：`configs/destination.sample.json`
 
-示例写入语句（来自本地文档中的 INSERT 示例）：
-- `SESSION SET GRAPH movie`
-- `TABLE INSERT (@Actor{id:{id}, name:"{name}", birthDate:date("{birth_date}")})`
-- `TABLE INSERT (@Movie{id:{id}, name:"{name}"})`
-- `TABLE MATCH (n@Actor{id:{src_id}}), (m@Movie{id:{dst_id}}) INSERT (n)-[@Act]->(m)`
+示例 Catalog 配置文件（推荐）：
+- `configs/destination.catalog.sample.json` - 标准 mapping 格式
+- `configs/destination.catalog.flat.json` - 扁平化 mapping 格式
+- `configs/destination.catalog.optimized.json` - 完整示例
 
-提示：请确保图 `movie` 中已存在对应点类型/标签与边类型（如 `Actor`、`Movie`、`Act`）。
-
-写后验证（示例查询）：
-- `SESSION SET GRAPH movie`
-- `MATCH (n@Actor{id:900001}) RETURN n`
-- `MATCH (m@Movie{id:10003}) RETURN m`
-- `MATCH (n@Actor{id:900001})-[e@Act]->(m@Movie{id:10003}) RETURN e`
+> 💡 **提示**：请确保目标图空间中已创建对应的点类型和边类型（Schema）。
 
 ## 运行方式（本地）
 入口命令：`yueshu-airbyte`。
@@ -152,6 +168,85 @@ airbyte-worker:
 2. 在连接器列表中选择上一步注册的 `yueshu-airbyte-source` 或 `yueshu-airbyte-destination`。
 3. 按照 `configs/source.sample.json` 或 `configs/destination.sample.json` 的字段填写连接配置。
 4. 在连接的 Catalog/stream config 中填写 `graph`、`setup_queries` 与读/写模板（参考 `configs/*.catalog.sample.json`）。
+
+> 重要：Airbyte UI 的 **Select streams** / **Configure connection** 页面默认不会展示自定义的 stream config 字段。
+> 请点击 **Edit JSON**，在 Catalog 中为每个 stream 的 `config` 填写映射信息。
+
+**Edit JSON 示例（Destination - Mapping 格式）**：
+
+点表映射示例：
+```json
+{
+	"streams": [
+		{
+			"stream": {"name": "actors"},
+			"config": {
+				"graph": "movie",
+				"mapping": {
+					"type": "vertex",
+					"label": "Actor",
+					"primary_key": {
+						"source_field": "id",
+						"dest_field": "id"
+					},
+					"properties": [
+						{"source_field": "name", "dest_field": "name"},
+						{"source_field": "birth_date", "dest_field": "birthDate", "transform": "date"}
+					]
+				},
+				"write_mode": "insert or replace"
+			}
+		}
+	]
+}
+```
+
+边表映射示例：
+```json
+{
+	"streams": [
+		{
+			"stream": {"name": "acts"},
+			"config": {
+				"graph": "movie",
+				"mapping": {
+					"type": "edge",
+					"label": "Act",
+					"src_vertex": {
+						"label": "Actor",
+						"primary_key": {"source_field": "actor_id", "dest_field": "id"}
+					},
+					"dst_vertex": {
+						"label": "Movie",
+						"primary_key": {"source_field": "movie_id", "dest_field": "id"}
+					},
+					"multiedge_key": {"source_field": "role_id"},
+					"properties": [
+						{"source_field": "role_name", "dest_field": "roleName"}
+					]
+				},
+				"write_mode": "insert or update"
+			}
+		}
+	]
+}
+```
+
+**Edit JSON 示例（Source）**：
+```json
+{
+	"streams": [
+		{
+			"stream": {"name": "edges_sample"},
+			"config": {
+				"graph": "movie",
+				"setup_queries": ["SESSION SET GRAPH movie"],
+				"read_query": "MATCH ()-[e]->() RETURN e LIMIT 5"
+			}
+		}
+	]
+}
+```
 4. 点击 **Test** 验证连接，创建并运行同步任务。
 
 ### 5) 常见问题

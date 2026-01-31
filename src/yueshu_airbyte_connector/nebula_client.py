@@ -31,13 +31,11 @@ class NebulaClient:
     def __init__(
         self,
         hosts: List[str],
-        port: Optional[int],
         username: str,
         password: str,
         graph: Optional[str] = None,
     ) -> None:
         self._hosts = hosts
-        self._port = port
         self._username = username
         self._password = password
         self._graph = graph
@@ -53,14 +51,7 @@ class NebulaClient:
         elif hasattr(config, "max_conn_pool_size"):
             config.max_conn_pool_size = 5
 
-        host_list = []
-        for host in self._hosts:
-            if ":" in host:
-                host_list.append(host)
-                continue
-            if self._port is None:
-                raise NebulaClientError("未提供 port，且 host 未包含端口")
-            host_list.append(f"{host}:{self._port}")
+        host_list = list(self._hosts)
         self._pool = pool_cls(
             hosts=host_list,
             username=self._username,

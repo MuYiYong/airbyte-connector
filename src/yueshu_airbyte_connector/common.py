@@ -10,7 +10,6 @@ from typing import Any, Dict, Iterable, List, Optional
 @dataclass
 class ConnectionConfig:
     hosts: List[str]
-    port: Optional[int]
     username: str
     password: str
 
@@ -67,7 +66,6 @@ def to_source_config(data: Dict[str, Any]) -> SourceConfig:
     hosts = _normalize_hosts(data)
     return SourceConfig(
         hosts=hosts,
-        port=int(data["port"]) if data.get("port") is not None else None,
         username=data["username"],
         password=data["password"],
     )
@@ -77,7 +75,6 @@ def to_destination_config(data: Dict[str, Any]) -> DestinationConfig:
     hosts = _normalize_hosts(data)
     return DestinationConfig(
         hosts=hosts,
-        port=int(data["port"]) if data.get("port") is not None else None,
         username=data["username"],
         password=data["password"],
     )
@@ -86,15 +83,26 @@ def to_destination_config(data: Dict[str, Any]) -> DestinationConfig:
 def _normalize_hosts(data: Dict[str, Any]) -> List[str]:
     hosts = data.get("hosts")
     if isinstance(hosts, list) and hosts:
-        return [str(item) for item in hosts if item]
+        normalized = [str(item) for item in hosts if item]
+        _validate_hosts(normalized)
+        return normalized
 
     host = data.get("host")
     if isinstance(host, list):
-        return [str(item) for item in host if item]
+        normalized = [str(item) for item in host if item]
+        _validate_hosts(normalized)
+        return normalized
     if isinstance(host, str) and host:
+        _validate_hosts([host])
         return [host]
 
     raise ValueError("必须提供 host 或 hosts")
+
+
+def _validate_hosts(hosts: List[str]) -> None:
+    for item in hosts:
+        if ":" not in item:
+            raise ValueError("仅支持 host:port 形式")
 
 
 def iter_airbyte_messages(stdin: Iterable[str]) -> Iterable[Dict[str, Any]]:

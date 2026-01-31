@@ -2,14 +2,52 @@
   "streams": [
     {
       "stream": {
+        "name": "actors"
+      },
+      "config": {
+        "graph": "movie",
+        "mapping": {
+          "type": "vertex",
+          "label": "Actor",
+          "primary_key": {
+            "source_field": "id",
+            "dest_field": "id"
+          },
+          "properties": [
+            {
+              "source_field": "name",
+              "dest_field": "name"
+            },
+            {
+              "source_field": "birth_date",
+              "dest_field": "birthDate",
+              "transform": "date"
+            }
+          ]
+        },
+        "write_mode": "insert or replace"
+      }
+    },
+    {
+      "stream": {
         "name": "movies"
       },
       "config": {
         "graph": "movie",
-        "setup_queries": [
-          "SESSION SET GRAPH movie"
-        ],
-        "write_query_template": "TABLE INSERT (@Movie{id:{movie_id}, name:\"{movie_name}\"})",
+        "mapping": {
+          "type": "vertex",
+          "label": "Movie",
+          "primary_key": {
+            "source_field": "movie_id",
+            "dest_field": "id"
+          },
+          "properties": [
+            {
+              "source_field": "movie_name",
+              "dest_field": "name"
+            }
+          ]
+        },
         "write_mode": "insert or replace"
       }
     },
@@ -19,10 +57,33 @@
       },
       "config": {
         "graph": "movie",
-        "setup_queries": [
-          "SESSION SET GRAPH movie"
-        ],
-        "write_query_template": "TABLE t { actor_id, movie_id, movie_name } = ( {actor_id}, {movie_id}, \"{movie_name}\" )\nUSE movie\nFOR re IN t\nMATCH (a@Actor) WHERE a.id = re.actor_id\nINSERT (a)-[@Act]->(@Movie {id: re.movie_id, name: re.movie_name})",
+        "mapping": {
+          "type": "edge",
+          "label": "Act",
+          "src_vertex": {
+            "label": "Actor",
+            "primary_key": {
+              "source_field": "actor_id",
+              "dest_field": "id"
+            }
+          },
+          "dst_vertex": {
+            "label": "Movie",
+            "primary_key": {
+              "source_field": "movie_id",
+              "dest_field": "id"
+            }
+          },
+          "multiedge_key": {
+            "source_field": "role_id"
+          },
+          "properties": [
+            {
+              "source_field": "role_name",
+              "dest_field": "roleName"
+            }
+          ]
+        },
         "write_mode": "insert or update"
       }
     }
