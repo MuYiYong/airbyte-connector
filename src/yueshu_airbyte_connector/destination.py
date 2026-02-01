@@ -86,6 +86,116 @@ def check(config_data: Dict[str, Any]) -> None:
         client.close()
 
 
+def discover(config_data: Dict[str, Any]) -> None:
+    """
+    Discover the graph schema and return catalog with streams for each vertex and edge type.
+    
+    For Yueshu, this generates streams for:
+    - Each vertex type (e.g., Account, User, etc.)
+    - Each edge type (e.g., Transfer, follows, etc.)
+    """
+    cfg = to_destination_config(config_data)
+    
+    if not cfg.graph:
+        emit_message(
+            {
+                "type": "CATALOG",
+                "catalog": {"streams": []},
+            }
+        )
+        return
+    
+    client = NebulaClient(
+        hosts=cfg.hosts,
+        username=cfg.username,
+        password=cfg.password,
+    )
+    
+    try:
+        client.connect()
+        
+        # 读取 graph schema
+        schema = read_graph_schema(client, cfg.graph)
+        
+        streams = []
+        
+        # 为每个顶点类型创建 stream
+        for vertex_label, vertex_schema in schema.vertices.items():
+            stream = {
+                "name": vertex_label,
+                "json_schema": {
+                    "type": "object",
+                    "properties": {
+                        prop.name: {
+                            "type": "string" if prop.type == "string" else "number",
+                            "description": f"{prop.name} (类型: {prop.type})",
+                        }
+                        for prop in vertex_schema.properties
+                    },
+                    "required": [
+                        prop.name for prop in vertex_schema.properties 
+                        if not prop.nullable
+                    ],
+                },
+                "default_cursor_field": [],
+                "source_defined_primary_key": [
+                    [prop.name for prop in vertex_schema.properties if not prop.nullable]
+                ] if any(not prop.nullable for prop in vertex_schema.properties) else [],
+                "supported_sync_modes": ["full_refresh"],
+            }
+            streams.append(stream)
+            log(f"发现顶点类型: {vertex_label} (属性: {len(vertex_schema.properties)})")
+        
+        # 为每个边类型创建 stream
+        for edge_label, edge_schema in schema.edges.items():
+            stream = {
+                "name": edge_label,
+                "json_schema": {
+                    "type": "object",
+                    "properties": {
+                        prop.name: {
+                            "type": "string" if prop.type == "string" else "number",
+                            "description": f"{prop.name} (类型: {prop.type})",
+                        }
+                        for prop in edge_schema.properties
+                    },
+                    "required": [
+                        prop.name for prop in edge_schema.properties 
+                        if not prop.nullable
+                    ],
+                },
+                "default_cursor_field": [],
+                "source_defined_primary_key": [
+                    [prop.name for prop in edge_schema.properties if not prop.nullable]
+                ] if any(not prop.nullable for prop in edge_schema.properties) else [],
+                "supported_sync_modes": ["full_refresh"],
+            }
+            streams.append(stream)
+            log(f"发现边类型: {edge_label} (属性: {len(edge_schema.properties)})")
+        
+        emit_message(
+            {
+                "type": "CATALOG",
+                "catalog": {"streams": streams},
+            }
+        )
+        log(f"成功发现 {len(streams)} 个 streams")
+        
+    except Exception as e:
+        log(f"discover 操作失败: {e}")
+        import traceback
+        traceback.print_exc()
+        emit_message(
+            {
+                "type": "CATALOG",
+                "catalog": {"streams": []},
+            }
+        )
+    finally:
+        client.close()
+
+
+
 _WRITE_MODE_MAP = {
     "insert": "INSERT",
     "insert or replace": "INSERT OR REPLACE",
