@@ -41,22 +41,22 @@ class NebulaClient:
 
     def connect(self) -> None:
         """
-        连接到 Nebula Graph
+        连接到 Nebula Graph (Yueshu 5.2.0)
         使用 context manager 方式创建客户端
         """
         client_cls = _import_client()
         
         # 创建同步客户端实例
-        # 参考: from nebulagraph_python import NebulaClient
+        # 参考: https://github.com/vesoft-inc/nebula-python/tree/v5.2.1/docs/1_started.md
         self._client = client_cls(
             hosts=self._hosts,
             username=self._username,
             password=self._password,
         )
         
-        # 如果指定了 graph，切换到该 graph space
-        if self._graph:
-            self.execute(f"USE {self._graph}")
+        # 注意: Yueshu 5.2.0 不需要执行 OPEN GRAPH 或 USE 命令
+        # 直接在 execute() 中执行 INSERT 等 GQL 语句即可
+        # graph 参数存储在 self._graph 中作为上下文记录
 
     def close(self) -> None:
         """关闭连接"""

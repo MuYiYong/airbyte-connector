@@ -141,8 +141,9 @@ def read(config_data: Dict[str, Any]) -> None:
             if not name or not gql:
                 continue
             graph = query.get("graph")
+            # 注意: Yueshu 不需要执行 OPEN GRAPH 或 USE 命令
+            # 直接执行 GQL 语句即可，graph 参数仅作为上下文记录
             if graph and graph != current_graph:
-                client.execute(f"USE {graph}")
                 current_graph = graph
             for setup in query.get("setup_queries") or []:
                 if setup:
