@@ -137,7 +137,7 @@ def discover(config_data: Dict[str, Any]) -> None:
                         if not prop.nullable
                     ],
                 },
-                "supported_destination_sync_modes": ["insert_append", "insert_overwrite", "insert_replace"],
+                "supported_destination_sync_modes": ["append", "overwrite"],
                 "default_cursor_field": [],
             }
             streams.append(stream)
@@ -161,7 +161,7 @@ def discover(config_data: Dict[str, Any]) -> None:
                         if not prop.nullable
                     ],
                 },
-                "supported_destination_sync_modes": ["insert_append", "insert_overwrite", "insert_replace"],
+                "supported_destination_sync_modes": ["append", "overwrite"],
                 "default_cursor_field": [],
             }
             streams.append(stream)
