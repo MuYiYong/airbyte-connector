@@ -77,9 +77,19 @@ class NebulaClient:
         result = self._client.execute(query)
         
         # 检查执行是否成功
-        if hasattr(result, "is_succeeded") and not result.is_succeeded():
-            error_msg = getattr(result, "error_msg", "执行失败")
-            raise NebulaClientError(f"查询执行失败: {error_msg}")
+        if hasattr(result, "is_succeeded"):
+            # is_succeeded 是一个属性，不是方法
+            is_succeeded = result.is_succeeded
+            if callable(is_succeeded):
+                # 如果是方法，则调用
+                if not is_succeeded():
+                    error_msg = getattr(result, "error_msg", "执行失败")
+                    raise NebulaClientError(f"查询执行失败: {error_msg}")
+            else:
+                # 如果是属性，直接判断
+                if not is_succeeded:
+                    error_msg = getattr(result, "error_msg", "执行失败")
+                    raise NebulaClientError(f"查询执行失败: {error_msg}")
         
         return result
 
