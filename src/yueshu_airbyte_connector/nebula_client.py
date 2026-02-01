@@ -11,7 +11,8 @@ class NebulaClientError(RuntimeError):
 
 
 def _import_pool() -> Tuple[str, Any, Any]:
-    module_name = "nebulagraph_python.client.pool"
+    # nebula5-python 包的导入名是 nebula.pool
+    module_name = "nebula.pool"
     try:
         module = importlib.import_module(module_name)
     except Exception as exc:  # noqa: BLE001
