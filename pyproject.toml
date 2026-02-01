@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Vesoft" }]
 dependencies = [
-  "nebula5-python>=5.2.0",
+  "nebula5_python==5.2.1",
 ]
 
 [project.optional-dependencies]

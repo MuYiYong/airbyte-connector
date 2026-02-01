@@ -142,7 +142,7 @@ def read(config_data: Dict[str, Any]) -> None:
                 continue
             graph = query.get("graph")
             if graph and graph != current_graph:
-                client.execute(f"SESSION SET GRAPH {graph}")
+                client.execute(f"USE {graph}")
                 current_graph = graph
             for setup in query.get("setup_queries") or []:
                 if setup:
