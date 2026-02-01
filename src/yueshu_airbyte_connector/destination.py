@@ -194,6 +194,10 @@ def discover(config_data: Dict[str, Any]) -> None:
 
 
 _WRITE_MODE_MAP = {
+    # Airbyte sync modes 映射到 Yueshu INSERT 语句
+    "append": "INSERT OR IGNORE",  # append: 只插入新数据，忽略重复的主键
+    "overwrite": "INSERT OR REPLACE",  # overwrite: 覆盖已有数据
+    # 也支持直接指定 Yueshu 的语句类型
     "insert": "INSERT",
     "insert or replace": "INSERT OR REPLACE",
     "insert or ignore": "INSERT OR IGNORE",
@@ -202,10 +206,20 @@ _WRITE_MODE_MAP = {
 
 
 def _normalize_write_mode(write_mode: str | None) -> str:
+    """
+    将 Airbyte sync mode 或 Yueshu INSERT 语句类型转换为对应的 INSERT 关键字
+    
+    映射关系：
+    - "append" (Airbyte sync mode)       → "INSERT OR IGNORE"  (只插入新数据，忽略重复)
+    - "overwrite" (Airbyte sync mode)    → "INSERT OR REPLACE" (覆盖已有数据)
+    - 或直接使用 Yueshu 的语句类型（insert, insert or replace 等）
+    
+    默认值: "INSERT OR IGNORE" （保守的追加模式）
+    """
     if not write_mode:
-        return _WRITE_MODE_MAP["insert or ignore"]
+        return _WRITE_MODE_MAP["append"]  # 默认使用 INSERT OR IGNORE (append 模式)
     normalized = write_mode.strip().lower()
-    return _WRITE_MODE_MAP.get(normalized, _WRITE_MODE_MAP["insert or ignore"])
+    return _WRITE_MODE_MAP.get(normalized, _WRITE_MODE_MAP["append"])
 
 
 def _replace_first_insert(query: str, insert_keyword: str) -> str:
