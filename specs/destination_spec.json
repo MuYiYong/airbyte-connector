@@ -5,7 +5,8 @@
         "title": "悦数图数据库 Destination Spec",
         "type": "object",
         "required": [
-            "hosts"
+            "hosts",
+            "graph"
         ],
         "properties": {
             "hosts": {
@@ -36,6 +37,25 @@
                 "default": "root",
                 "airbyte_secret": true,
                 "order": 2
+            },
+            "graph": {
+                "type": "string",
+                "title": "图空间名称",
+                "description": "要连接的 NebulaGraph 图空间（graph space）名称",
+                "order": 3
+            },
+            "insert_mode": {
+                "type": "string",
+                "title": "插入模式",
+                "description": "数据插入模式",
+                "default": "insert or ignore",
+                "enum": [
+                    "insert",
+                    "insert or replace",
+                    "insert or update",
+                    "insert or ignore"
+                ],
+                "order": 4
             }
         }
     }

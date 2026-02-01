@@ -21,7 +21,9 @@ class SourceConfig(ConnectionConfig):
 
 @dataclass
 class DestinationConfig(ConnectionConfig):
-    pass
+    graph: Optional[str] = None
+    insert_mode: Optional[str] = None
+
 
 
 DEFAULT_CHECK_QUERY = "SHOW CURRENT_USER"
@@ -75,8 +77,10 @@ def to_destination_config(data: Dict[str, Any]) -> DestinationConfig:
     hosts = _normalize_hosts(data)
     return DestinationConfig(
         hosts=hosts,
-        username=data["username"],
-        password=data["password"],
+        username=data.get("username", "root"),
+        password=data.get("password", "root"),
+        graph=data.get("graph"),
+        insert_mode=data.get("insert_mode"),
     )
 
 

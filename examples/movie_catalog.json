@@ -1,0 +1,198 @@
+{
+  "catalog": {
+    "streams": [
+      {
+        "stream": "actor",
+        "namespace": "movie_db",
+        "json_schema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "actor_id": {
+              "type": "integer"
+            },
+            "actor_name": {
+              "type": "string"
+            },
+            "birth_date": {
+              "type": "string",
+              "format": "date"
+            },
+            "height": {
+              "type": "integer"
+            },
+            "nationality": {
+              "type": "string"
+            }
+          },
+          "required": ["actor_id"]
+        },
+        "key_properties": ["actor_id"],
+        "bookmark_properties": [],
+        "is_resumable": false,
+        "default_cursor_field": [],
+        "supported_sync_modes": ["full_refresh"],
+        "source_defined_primary_key": [["actor_id"]],
+        "config": {
+          "type": "vertex",
+          "label": "Actor",
+          "primary_key": {
+            "source_field": "actor_id",
+            "dest_field": "id"
+          },
+          "properties": [
+            {
+              "source_field": "actor_name",
+              "dest_field": "name"
+            },
+            {
+              "source_field": "birth_date",
+              "dest_field": "birthDate",
+              "transform": "date"
+            },
+            {
+              "source_field": "height",
+              "dest_field": "height"
+            },
+            {
+              "source_field": "nationality",
+              "dest_field": "nationality"
+            }
+          ]
+        }
+      },
+      {
+        "stream": "movie",
+        "namespace": "movie_db",
+        "json_schema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "movie_id": {
+              "type": "integer"
+            },
+            "movie_title": {
+              "type": "string"
+            },
+            "release_date": {
+              "type": "string",
+              "format": "date"
+            },
+            "runtime": {
+              "type": "integer"
+            },
+            "genre": {
+              "type": "string"
+            }
+          },
+          "required": ["movie_id"]
+        },
+        "key_properties": ["movie_id"],
+        "bookmark_properties": [],
+        "is_resumable": false,
+        "default_cursor_field": [],
+        "supported_sync_modes": ["full_refresh"],
+        "source_defined_primary_key": [["movie_id"]],
+        "config": {
+          "type": "vertex",
+          "label": "Movie",
+          "primary_key": {
+            "source_field": "movie_id",
+            "dest_field": "id"
+          },
+          "properties": [
+            {
+              "source_field": "movie_title",
+              "dest_field": "title"
+            },
+            {
+              "source_field": "release_date",
+              "dest_field": "releaseDate",
+              "transform": "date"
+            },
+            {
+              "source_field": "runtime",
+              "dest_field": "runtime"
+            },
+            {
+              "source_field": "genre",
+              "dest_field": "primaryGenre"
+            }
+          ]
+        }
+      },
+      {
+        "stream": "acted_in",
+        "namespace": "movie_db",
+        "json_schema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "actor_id": {
+              "type": "integer"
+            },
+            "movie_id": {
+              "type": "integer"
+            },
+            "role_id": {
+              "type": "integer"
+            },
+            "character_name": {
+              "type": "string"
+            },
+            "screen_time": {
+              "type": "integer"
+            }
+          },
+          "required": ["actor_id", "movie_id", "role_id"]
+        },
+        "key_properties": ["actor_id", "movie_id", "role_id"],
+        "bookmark_properties": [],
+        "is_resumable": false,
+        "default_cursor_field": [],
+        "supported_sync_modes": ["full_refresh"],
+        "source_defined_primary_key": [["actor_id", "movie_id", "role_id"]],
+        "config": {
+          "type": "edge",
+          "label": "ActedIn",
+          "src_vertex": {
+            "label": "Actor",
+            "primary_key": {
+              "source_field": "actor_id",
+              "dest_field": "id"
+            }
+          },
+          "dst_vertex": {
+            "label": "Movie",
+            "primary_key": {
+              "source_field": "movie_id",
+              "dest_field": "id"
+            }
+          },
+          "multiedge_key": {
+            "source_field": "role_id"
+          },
+          "properties": [
+            {
+              "source_field": "character_name",
+              "dest_field": "characterName"
+            },
+            {
+              "source_field": "screen_time",
+              "dest_field": "screenTime"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "destination_config": {
+    "graph": "movie",
+    "insert_mode": "insert or replace"
+  },
+  "connection_config": {
+    "hosts": ["192.168.1.100:9669"],
+    "user": "root",
+    "password": "nebula"
+  }
+}

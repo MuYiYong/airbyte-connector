@@ -194,6 +194,176 @@ def _apply_transform(value: Any, transform: str) -> str:
         return _format_value(value)
 
 
+# ============================================================================
+# 基于 Schema 的 GQL 生成（新方法）
+# ============================================================================
+
+def generate_vertex_gql_with_schema(
+    tag_schema: Any,  # VertexSchema from schema_reader
+    field_mapping: Dict[str, str],
+    record: Dict[str, Any]
+) -> str:
+    """
+    根据 TAG schema 和字段映射生成点插入 GQL
+    
+    Args:
+        tag_schema: VertexSchema 实例
+        field_mapping: 字段映射，格式 {source_field: dest_field}
+        record: 数据记录
+        
+    Returns:
+        点插入 GQL 语句
+        
+    Example:
+        field_mapping = {"id": "id", "name": "name", "birth_date": "birthDate"}
+        record = {"id": 1001, "name": "Tom Hanks", "birth_date": "1956-07-09"}
+        -> INSERT (@Actor{id: 1001, name: "Tom Hanks", birthDate: date("1956-07-09")})
+    """
+    label = tag_schema.label
+    attrs = []
+    
+    for source_field, dest_field in field_mapping.items():
+        if source_field not in record:
+            continue
+        
+        value = record[source_field]
+        
+        # 从 schema 获取目标字段的数据类型
+        prop_schema = tag_schema.get_property(dest_field)
+        if prop_schema:
+            formatted = _format_value_by_type(value, prop_schema.type)
+        else:
+            formatted = _format_value(value)
+        
+        attrs.append(f"{dest_field}: {formatted}")
+    
+    attrs_str = ", ".join(attrs)
+    return f"INSERT (@{label}{{{attrs_str}}})"
+
+
+def generate_edge_gql_with_schema(
+    edge_schema: Any,  # EdgeSchema from schema_reader
+    src_tag_label: str,
+    dst_tag_label: str,
+    field_mapping: Dict[str, str],
+    record: Dict[str, Any]
+) -> str:
+    """
+    根据 EDGE schema 和字段映射生成边插入 GQL
+    
+    Args:
+        edge_schema: EdgeSchema 实例
+        src_tag_label: 起点 TAG 名称
+        dst_tag_label: 终点 TAG 名称
+        field_mapping: 字段映射，包括特殊字段 _src.field, _dst.field, _ranking
+        record: 数据记录
+        
+    Returns:
+        边插入 GQL 语句（MATCH ... INSERT ...）
+        
+    Example:
+        field_mapping = {
+            "actor_id": "_src.id",
+            "movie_id": "_dst.id", 
+            "role_id": "_ranking",
+            "role_name": "roleName"
+        }
+        -> MATCH (src@Actor{id: 1001}), (dst@Movie{id: 2001}) 
+           INSERT (src)-[@Act:1{roleName: "Forrest Gump"}]->(dst)
+    """
+    label = edge_schema.label
+    
+    # 解析字段映射
+    src_mapping = {}
+    dst_mapping = {}
+    ranking_field = None
+    edge_attrs = {}
+    
+    for source_field, dest_field in field_mapping.items():
+        if source_field not in record:
+            continue
+        
+        value = record[source_field]
+        
+        if dest_field.startswith("_src."):
+            # 起点字段
+            actual_field = dest_field[5:]  # 移除 "_src." 前缀
+            src_mapping[actual_field] = value
+        elif dest_field.startswith("_dst."):
+            # 终点字段
+            actual_field = dest_field[5:]  # 移除 "_dst." 前缀
+            dst_mapping[actual_field] = value
+        elif dest_field == "_ranking":
+            # ranking 字段（多边键）
+            ranking_field = value
+        else:
+            # 边的属性
+            prop_schema = edge_schema.get_property(dest_field)
+            if prop_schema:
+                formatted = _format_value_by_type(value, prop_schema.type)
+            else:
+                formatted = _format_value(value)
+            edge_attrs[dest_field] = formatted
+    
+    # 构建 MATCH 子句
+    src_attrs_str = ", ".join([f"{k}: {_format_value(v)}" for k, v in src_mapping.items()])
+    dst_attrs_str = ", ".join([f"{k}: {_format_value(v)}" for k, v in dst_mapping.items()])
+    
+    match_clause = f"MATCH (src@{src_tag_label}{{{src_attrs_str}}}), (dst@{dst_tag_label}{{{dst_attrs_str}}})"
+    
+    # 构建 INSERT 子句
+    ranking_str = f":{ranking_field}" if ranking_field is not None else ""
+    edge_attrs_str = ", ".join([f"{k}: {v}" for k, v in edge_attrs.items()])
+    
+    edge_clause = f"(src)-[@{label}{ranking_str}{{{edge_attrs_str}}}]->(dst)"
+    
+    return f"{match_clause} INSERT {edge_clause}"
+
+
+def _format_value_by_type(value: Any, nebula_type: str) -> str:
+    """
+    根据 NebulaGraph 数据类型格式化值
+    
+    Args:
+        value: 原始值
+        nebula_type: NebulaGraph 数据类型（如 string, int64, date, datetime 等）
+        
+    Returns:
+        格式化后的值字符串
+    """
+    if value is None:
+        return "NULL"
+    
+    # 标准化类型名（转小写）
+    type_lower = nebula_type.lower()
+    
+    # 日期时间类型
+    if type_lower in ("date",):
+        return f'date("{value}")'
+    elif type_lower in ("datetime",):
+        return f'datetime("{value}")'
+    elif type_lower in ("timestamp",):
+        return f'timestamp("{value}")'
+    elif type_lower in ("time",):
+        return f'time("{value}")'
+    
+    # 数值类型
+    elif type_lower in ("int", "int8", "int16", "int32", "int64"):
+        return str(int(value))
+    elif type_lower in ("float", "double"):
+        return str(float(value))
+    
+    # 布尔类型
+    elif type_lower in ("bool", "boolean"):
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        return "true" if str(value).lower() in ("true", "1", "yes") else "false"
+    
+    # 字符串类型（默认）
+    else:
+        return _format_value(value)
+
+
 # 测试代码
 if __name__ == "__main__":
     # 测试点表 GQL 生成

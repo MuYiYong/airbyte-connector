@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Iterable
+from typing import Any, Dict, Iterable, Optional
 
 from .common import (
     DEFAULT_CHECK_QUERY,
@@ -13,9 +13,12 @@ from .common import (
 )
 from .gql_generator import (
     generate_gql_from_mapping,
+    generate_vertex_gql_with_schema,
+    generate_edge_gql_with_schema,
     transform_flat_config_to_mapping,
 )
 from .nebula_client import NebulaClient, NebulaClientError
+from .schema_reader import GraphSchema, read_graph_schema
 
 
 def spec() -> Dict[str, Any]:
@@ -30,6 +33,7 @@ def spec() -> Dict[str, Any]:
                     "hosts": {"type": "array", "items": {"type": "string"}},
                     "username": {"type": "string", "default": "root"},
                     "password": {"type": "string", "airbyte_secret": True, "default": "root"},
+                    "graph": {"type": "string", "description": "The graph space to connect to.", "default": ""},
                 },
             },
         },
@@ -46,6 +50,25 @@ def check(config_data: Dict[str, Any]) -> None:
     try:
         client.connect()
         client.execute(DEFAULT_CHECK_QUERY)
+        
+        # 如果配置了 graph，尝试读取 schema
+        if cfg.graph:
+            log(f"正在验证图空间 {cfg.graph}...")
+            try:
+                schema = read_graph_schema(client, cfg.graph)
+                log(f"成功读取 schema: {len(schema.vertices)} 个点类型, {len(schema.edges)} 个边类型")
+            except Exception as e:
+                emit_message(
+                    {
+                        "type": "CONNECTION_STATUS",
+                        "connectionStatus": {
+                            "status": "FAILED",
+                            "message": f"无法读取图空间 {cfg.graph} 的 schema: {e}"
+                        },
+                    }
+                )
+                return
+        
         emit_message(
             {
                 "type": "CONNECTION_STATUS",
@@ -107,9 +130,10 @@ def _apply_table_insert(query: str, write_mode: str | None) -> str:
 def _load_write_map(config_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     """
     Load write configuration from catalog.
-    Supports two mapping formats:
-    1. Mapping-based (hierarchical) - preferred
-    2. Mapping-based (flat) - auto-converted to hierarchical
+    Supports three mapping formats (in priority order):
+    1. Schema-based (new) - tag/edge + field_mapping
+    2. Mapping-based (hierarchical) - full mapping config
+    3. Mapping-based (flat) - auto-converted to hierarchical
     """
     catalog = read_catalog_from_env() or {}
     write_map: Dict[str, Dict[str, Any]] = {}
@@ -122,9 +146,24 @@ def _load_write_map(config_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         
         config = stream_entry.get("config") or {}
         
-        # Priority 1: Check for mapping-based configuration (hierarchical format)
+        # Priority 1: Check for schema-based configuration (new format)
+        if "tag" in config or "edge" in config:
+            # 新的基于 schema 的配置
+            write_map[name] = {
+                "mode": "schema_based",
+                "tag": config.get("tag"),
+                "edge": config.get("edge"),
+                "src_tag": config.get("src_tag"),
+                "dst_tag": config.get("dst_tag"),
+                "field_mapping": config.get("field_mapping", {}),
+                "setup_queries": config.get("setup_queries") or [],
+            }
+            continue
+        
+        # Priority 2: Check for mapping-based configuration (hierarchical format)
         if "mapping" in config:
             write_map[name] = {
+                "mode": "mapping_based",
                 "mapping_config": {
                     "graph": config.get("graph"),
                     "mapping": config["mapping"],
@@ -135,11 +174,12 @@ def _load_write_map(config_data: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
             }
             continue
         
-        # Priority 2: Check for flat mapping configuration
+        # Priority 3: Check for flat mapping configuration
         if "mapping_type" in config:
             # Transform flat config to standard mapping format
             mapping_config = transform_flat_config_to_mapping(config)
             write_map[name] = {
+                "mode": "mapping_based",
                 "mapping_config": mapping_config,
                 "graph": config.get("graph"),
                 "setup_queries": config.get("setup_queries") or [],
@@ -154,31 +194,52 @@ def write(config_data: Dict[str, Any], stdin: Iterable[str]) -> None:
     write_map = _load_write_map(config_data)
     if not write_map:
         raise ValueError(
-            "配置不能为空，请在 AIRBYTE_CATALOG 的 stream config 中提供 mapping 配置"
+            "配置不能为空，请在 AIRBYTE_CATALOG 的 stream config 中提供配置"
         )
+    
     client = NebulaClient(
         hosts=cfg.hosts,
         username=cfg.username,
         password=cfg.password,
     )
-    try:
+    
+    # 读取 schema（如果需要）
+    schema: Optional[GraphSchema] = None
+    if cfg.graph:
+        try:
+            client.connect()
+            schema = read_graph_schema(client, cfg.graph)
+            log(f"成功读取 graph {cfg.graph} schema: {len(schema.vertices)} 点类型, {len(schema.edges)} 边类型")
+        except Exception as e:
+            log(f"读取 schema 失败: {e}")
+            client.close()
+            raise ValueError(f"无法读取图空间 {cfg.graph} 的 schema: {e}")
+    else:
         client.connect()
-        current_graph = None
+    
+    # 获取全局 insert_mode
+    global_insert_mode = cfg.insert_mode
+    
+    try:
+        current_graph = cfg.graph if cfg.graph else None
         initialized_streams = set()
+        
         for message in iter_airbyte_messages(stdin):
             if message.get("type") != "RECORD":
                 continue
+            
             record = message.get("record", {})
             stream = record.get("stream")
             data = record.get("data", {})
             write_item = write_map.get(stream)
+            
             if not write_item:
                 continue
             
-            # Handle graph switching
-            graph = write_item.get("graph")
+            # Handle graph switching (for backward compatibility with old config)
+            graph = write_item.get("graph") or current_graph
             if graph and graph != current_graph:
-                client.execute(f"SESSION SET GRAPH {graph}")
+                client.execute(f"USE {graph}")
                 current_graph = graph
             
             # Execute setup queries once per stream
@@ -188,14 +249,56 @@ def write(config_data: Dict[str, Any], stdin: Iterable[str]) -> None:
                         client.execute(query)
                 initialized_streams.add(stream)
             
-            # Use mapping-based GQL generation
-            mapping_config = write_item.get("mapping_config", {})
-            try:
-                gql = generate_gql_from_mapping(mapping_config, data)
-                write_mode = mapping_config.get("write_mode")
-            except Exception as e:
-                log(f"生成 GQL 失败: {e}, stream={stream}, data={data}")
-                raise ValueError(f"GQL 生成失败 (stream: {stream}): {e}")
+            # Generate GQL based on configuration mode
+            mode = write_item.get("mode", "mapping_based")
+            
+            if mode == "schema_based":
+                # 新的基于 schema 的配置
+                if not schema:
+                    raise ValueError(f"未配置 graph，无法使用 schema-based 模式 (stream: {stream})")
+                
+                tag = write_item.get("tag")
+                edge = write_item.get("edge")
+                field_mapping = write_item.get("field_mapping", {})
+                
+                try:
+                    if tag:
+                        # 点表插入
+                        tag_schema = schema.get_vertex_schema(tag)
+                        if not tag_schema:
+                            raise ValueError(f"TAG {tag} 在 schema 中不存在")
+                        gql = generate_vertex_gql_with_schema(tag_schema, field_mapping, data)
+                        write_mode = global_insert_mode
+                    elif edge:
+                        # 边表插入
+                        edge_schema = schema.get_edge_schema(edge)
+                        if not edge_schema:
+                            raise ValueError(f"EDGE {edge} 在 schema 中不存在")
+                        
+                        src_tag = write_item.get("src_tag")
+                        dst_tag = write_item.get("dst_tag")
+                        if not src_tag or not dst_tag:
+                            raise ValueError(f"Edge 配置缺少 src_tag 或 dst_tag (stream: {stream})")
+                        
+                        gql = generate_edge_gql_with_schema(
+                            edge_schema, src_tag, dst_tag, field_mapping, data
+                        )
+                        write_mode = global_insert_mode
+                    else:
+                        raise ValueError(f"schema-based 配置必须指定 tag 或 edge (stream: {stream})")
+                except Exception as e:
+                    log(f"生成 GQL 失败: {e}, stream={stream}, data={data}")
+                    raise ValueError(f"GQL 生成失败 (stream: {stream}): {e}")
+                    
+            else:
+                # 旧的 mapping-based 配置（向后兼容）
+                mapping_config = write_item.get("mapping_config", {})
+                try:
+                    gql = generate_gql_from_mapping(mapping_config, data)
+                    write_mode = mapping_config.get("write_mode") or global_insert_mode
+                except Exception as e:
+                    log(f"生成 GQL 失败: {e}, stream={stream}, data={data}")
+                    raise ValueError(f"GQL 生成失败 (stream: {stream}): {e}")
             
             # Apply write mode
             gql = _apply_table_insert(gql, write_mode)
