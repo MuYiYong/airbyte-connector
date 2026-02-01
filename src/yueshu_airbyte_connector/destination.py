@@ -124,7 +124,7 @@ def discover(config_data: Dict[str, Any]) -> None:
         
         # 为每个顶点类型创建 stream
         for vertex_label, vertex_schema in schema.vertices.items():
-            stream = {
+            stream_def = {
                 "name": vertex_label,
                 "json_schema": {
                     "type": "object",
@@ -143,12 +143,21 @@ def discover(config_data: Dict[str, Any]) -> None:
                 "supported_destination_sync_modes": ["append", "overwrite"],
                 "default_cursor_field": [],
             }
+            # 为 destination 包装 stream 和初始配置
+            stream = {
+                "stream": stream_def,
+                "config": {
+                    "destination_sync_mode": "append",  # 默认选择 append 模式
+                    "tag": vertex_label,  # 指定要写入的顶点类型
+                    "field_mapping": {},  # 空映射表示使用默认映射
+                }
+            }
             streams.append(stream)
             log(f"发现顶点类型: {vertex_label} (属性: {len(vertex_schema.properties)})")
         
         # 为每个边类型创建 stream
         for edge_label, edge_schema in schema.edges.items():
-            stream = {
+            stream_def = {
                 "name": edge_label,
                 "json_schema": {
                     "type": "object",
@@ -166,6 +175,15 @@ def discover(config_data: Dict[str, Any]) -> None:
                 },
                 "supported_destination_sync_modes": ["append", "overwrite"],
                 "default_cursor_field": [],
+            }
+            # 为 destination 包装 stream 和初始配置
+            stream = {
+                "stream": stream_def,
+                "config": {
+                    "destination_sync_mode": "append",  # 默认选择 append 模式
+                    "edge": edge_label,  # 指定要写入的边类型
+                    "field_mapping": {},  # 空映射表示使用默认映射
+                }
             }
             streams.append(stream)
             log(f"发现边类型: {edge_label} (属性: {len(edge_schema.properties)})")
