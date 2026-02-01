@@ -117,9 +117,81 @@ def read_graph_schema(client: Any, graph_name: str) -> GraphSchema:
                 schema.vertices[entity_name] = vertex_schema
                 log(f"  顶点 {entity_name}: {len(vertex_schema.properties)} 个属性")
                 
+            elif entity_type == "Edge":
+                edge_schema = EdgeSchema(label=entity_name)
+                # 从属性列表推断数据类型（默认为 string）
+                for prop_name in properties:
+                    edge_schema.properties.append(PropertySchema(
+                        name=prop_name,
+                        type="string",  # Yueshu 的 schema 不提供类型信息，默认为 string
+                        nullable=True
+                    ))
+                # 标记多边键属性
+                if primary_or_multi_key:
+                    for key_name in primary_or_multi_key:
+                        prop = edge_schema.get_property(key_name)
+                        if prop:
+                            prop.nullable = False  # 多边键不为空
+                schema.edges[entity_name] = edge_schema
+                log(f"  边 {entity_name}: {len(edge_schema.properties)} 个属性")
+                
+    except Exception as e:
+        log(f"读取 graph schema 失败: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    return schema
 
 
-def _parse_show_tags(result: Any) -> List[str]:
+def _get_graph_type(client: Any, graph_name: str) -> Optional[str]:
+    """
+    从 DESC GRAPH 获取 graph 的 type
+    
+    Returns:
+        graph type 名称，如 'blockchain'
+    """
+    try:
+        result = client.execute(f"DESC GRAPH {graph_name}")
+        if hasattr(result, 'as_primitive_by_row'):
+            for row_data in result.as_primitive_by_row():
+                if isinstance(row_data, dict):
+                    return row_data.get('graph_type_name')
+        return None
+    except Exception as e:
+        log(f"获取 graph type 失败: {e}")
+        return None
+
+
+def _read_graph_type_schema(client: Any, graph_type: str) -> List[tuple]:
+    """
+    使用 DESC GRAPH TYPE 读取 graph type 的完整 schema
+    
+    Returns:
+        列表，每项为 (entity_type, entity_name, labels, properties, primary_or_multi_key)
+        其中：
+        - entity_type: "Node" 或 "Edge"
+        - entity_name: 实体类型名（如 Account, Transfer）
+        - labels: 标签列表
+        - properties: 属性名列表
+        - primary_or_multi_key: 主键/多边键列表
+    """
+    result = []
+    try:
+        query_result = client.execute(f"DESC GRAPH TYPE {graph_type}")
+        if hasattr(query_result, 'as_primitive_by_row'):
+            for row_data in query_result.as_primitive_by_row():
+                if isinstance(row_data, dict):
+                    entity_type = row_data.get('entity_type', '')
+                    type_name = row_data.get('type_name', '')
+                    labels = row_data.get('labels', [])
+                    properties = row_data.get('properties', [])
+                    primary_or_multi_key = row_data.get('primary_key/multiedge_key', [])
+                    
+                    result.append((entity_type, type_name, labels, properties, primary_or_multi_key))
+        return result
+    except Exception as e:
+        log(f"读取 graph type schema 失败: {e}")
+        return result
     """
     解析 SHOW TAGS 的结果（弃用）
     
