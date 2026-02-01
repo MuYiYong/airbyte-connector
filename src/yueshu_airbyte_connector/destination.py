@@ -137,11 +137,8 @@ def discover(config_data: Dict[str, Any]) -> None:
                         if not prop.nullable
                     ],
                 },
+                "supported_destination_sync_modes": ["insert_append", "insert_overwrite", "insert_replace"],
                 "default_cursor_field": [],
-                "source_defined_primary_key": [
-                    [prop.name for prop in vertex_schema.properties if not prop.nullable]
-                ] if any(not prop.nullable for prop in vertex_schema.properties) else [],
-                "supported_sync_modes": ["full_refresh"],
             }
             streams.append(stream)
             log(f"发现顶点类型: {vertex_label} (属性: {len(vertex_schema.properties)})")
@@ -164,11 +161,8 @@ def discover(config_data: Dict[str, Any]) -> None:
                         if not prop.nullable
                     ],
                 },
+                "supported_destination_sync_modes": ["insert_append", "insert_overwrite", "insert_replace"],
                 "default_cursor_field": [],
-                "source_defined_primary_key": [
-                    [prop.name for prop in edge_schema.properties if not prop.nullable]
-                ] if any(not prop.nullable for prop in edge_schema.properties) else [],
-                "supported_sync_modes": ["full_refresh"],
             }
             streams.append(stream)
             log(f"发现边类型: {edge_label} (属性: {len(edge_schema.properties)})")
