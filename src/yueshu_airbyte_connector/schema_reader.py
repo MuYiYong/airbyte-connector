@@ -81,8 +81,7 @@ def read_graph_schema(client: Any, graph_name: str) -> GraphSchema:
     """
     schema = GraphSchema(graph_name=graph_name)
     
-    # 切换到指定图空间
-    client.execute(f"USE {graph_name}")
+    # 注意: Yueshu 5.2.0 不支持 USE 命令，直接执行 SHOW TAGS/SHOW EDGES 即可
     log(f"正在读取图 {graph_name} 的 schema...")
     
     # 读取所有 TAG
