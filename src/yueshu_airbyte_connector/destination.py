@@ -36,6 +36,9 @@ def spec() -> Dict[str, Any]:
                     "graph": {"type": "string", "description": "The graph space to connect to.", "default": ""},
                 },
             },
+            "supportsNormalization": False,
+            "supportsDBT": False,
+            "supported_destination_sync_modes": ["append", "overwrite"],
         },
     }
 
