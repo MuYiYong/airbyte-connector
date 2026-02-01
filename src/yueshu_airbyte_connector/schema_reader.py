@@ -70,7 +70,9 @@ class GraphSchema:
 
 def read_graph_schema(client: Any, graph_name: str) -> GraphSchema:
     """
-    读取图的完整 schema
+    读取 Yueshu 5.2.0 图的完整 schema
+    
+    使用 DESC GRAPH 命令查询 graph type，然后用 DESC GRAPH TYPE 命令获取完整的 schema 信息
     
     Args:
         client: NebulaClient 实例
@@ -81,46 +83,51 @@ def read_graph_schema(client: Any, graph_name: str) -> GraphSchema:
     """
     schema = GraphSchema(graph_name=graph_name)
     
-    # 注意: Yueshu 5.2.0 不支持 USE 命令，直接执行 SHOW TAGS/SHOW EDGES 即可
-    log(f"正在读取图 {graph_name} 的 schema...")
-    
-    # 读取所有 TAG
     try:
-        result = client.execute("SHOW TAGS")
-        tags = _parse_show_tags(result)
-        log(f"发现 {len(tags)} 个点类型: {tags}")
+        log(f"正在读取图 {graph_name} 的 schema...")
         
-        for tag_name in tags:
-            tag_schema = _read_tag_schema(client, tag_name)
-            if tag_schema:
-                schema.vertices[tag_name] = tag_schema
-    except Exception as e:
-        log(f"读取 TAG 失败: {e}")
-    
-    # 读取所有 EDGE
-    try:
-        result = client.execute("SHOW EDGES")
-        edges = _parse_show_edges(result)
-        log(f"发现 {len(edges)} 个边类型: {edges}")
+        # Step 1: 获取 graph 的 type
+        graph_type = _get_graph_type(client, graph_name)
+        if not graph_type:
+            log(f"无法获取图 {graph_name} 的 type")
+            return schema
         
-        for edge_name in edges:
-            edge_schema = _read_edge_schema(client, edge_name)
-            if edge_schema:
-                schema.edges[edge_name] = edge_schema
-    except Exception as e:
-        log(f"读取 EDGE 失败: {e}")
-    
-    return schema
+        log(f"图 {graph_name} 的类型: {graph_type}")
+        
+        # Step 2: 使用 DESC GRAPH TYPE 获取完整的 schema
+        graph_schema_info = _read_graph_type_schema(client, graph_type)
+        
+        # Step 3: 解析顶点和边的 schema
+        for entity_type, entity_name, labels, properties, primary_or_multi_key in graph_schema_info:
+            if entity_type == "Node":
+                vertex_schema = VertexSchema(label=entity_name)
+                # 从属性列表推断数据类型（默认为 string）
+                for prop_name in properties:
+                    vertex_schema.properties.append(PropertySchema(
+                        name=prop_name,
+                        type="string",  # Yueshu 的 schema 不提供类型信息，默认为 string
+                        nullable=True
+                    ))
+                # 标记主键属性
+                if primary_or_multi_key:
+                    for key_name in primary_or_multi_key:
+                        prop = vertex_schema.get_property(key_name)
+                        if prop:
+                            prop.nullable = False  # 主键不为空
+                schema.vertices[entity_name] = vertex_schema
+                log(f"  顶点 {entity_name}: {len(vertex_schema.properties)} 个属性")
+                
 
 
 def _parse_show_tags(result: Any) -> List[str]:
-    """解析 SHOW TAGS 的结果"""
-    tags = []
+    """
+    解析 SHOW TAGS 的结果（弃用）
     
+    现在使用 DESC GRAPH TYPE 代替
+    """
+    tags = []
     try:
-        # NebulaGraph 返回结果通常可以通过 as_primitive 或类似方法转换
         if hasattr(result, 'column_values'):
-            # nebula5-python 格式
             for row in result.rows():
                 if hasattr(row, 'values') and len(row.values) > 0:
                     tag_name = row.values[0].get_sVal()
@@ -128,132 +135,10 @@ def _parse_show_tags(result: Any) -> List[str]:
                         tag_name = tag_name.decode('utf-8')
                     tags.append(tag_name)
         elif hasattr(result, 'as_primitive'):
-            # 尝试 as_primitive 方法
             data = result.as_primitive()
             for row in data:
                 if isinstance(row, (list, tuple)) and len(row) > 0:
                     tags.append(str(row[0]))
     except Exception as e:
         log(f"解析 SHOW TAGS 结果失败: {e}")
-    
     return tags
-
-
-def _parse_show_edges(result: Any) -> List[str]:
-    """解析 SHOW EDGES 的结果"""
-    edges = []
-    
-    try:
-        if hasattr(result, 'column_values'):
-            for row in result.rows():
-                if hasattr(row, 'values') and len(row.values) > 0:
-                    edge_name = row.values[0].get_sVal()
-                    if isinstance(edge_name, bytes):
-                        edge_name = edge_name.decode('utf-8')
-                    edges.append(edge_name)
-        elif hasattr(result, 'as_primitive'):
-            data = result.as_primitive()
-            for row in data:
-                if isinstance(row, (list, tuple)) and len(row) > 0:
-                    edges.append(str(row[0]))
-    except Exception as e:
-        log(f"解析 SHOW EDGES 结果失败: {e}")
-    
-    return edges
-
-
-def _read_tag_schema(client: Any, tag_name: str) -> Optional[VertexSchema]:
-    """
-    读取 TAG 的 schema
-    
-    DESCRIBE TAG 返回格式（示例）：
-    +----------+----------+----------+---------+---------+
-    | Field    | Type     | Null     | Default | Comment |
-    +----------+----------+----------+---------+---------+
-    | "id"     | "int64"  | "NO"     |         |         |
-    | "name"   | "string" | "YES"    |         |         |
-    +----------+----------+----------+---------+---------+
-    """
-    try:
-        result = client.execute(f"DESCRIBE TAG {tag_name}")
-        properties = _parse_describe_result(result)
-        
-        return VertexSchema(
-            label=tag_name,
-            properties=properties
-        )
-    except Exception as e:
-        log(f"读取 TAG {tag_name} schema 失败: {e}")
-        return None
-
-
-def _read_edge_schema(client: Any, edge_name: str) -> Optional[EdgeSchema]:
-    """
-    读取 EDGE 的 schema
-    
-    DESCRIBE EDGE 返回格式与 DESCRIBE TAG 相同
-    """
-    try:
-        result = client.execute(f"DESCRIBE EDGE {edge_name}")
-        properties = _parse_describe_result(result)
-        
-        return EdgeSchema(
-            label=edge_name,
-            properties=properties
-        )
-    except Exception as e:
-        log(f"读取 EDGE {edge_name} schema 失败: {e}")
-        return None
-
-
-def _parse_describe_result(result: Any) -> List[PropertySchema]:
-    """
-    解析 DESCRIBE TAG/EDGE 的结果
-    
-    返回字段列表，每个字段包含：name, type, nullable
-    """
-    properties = []
-    
-    try:
-        if hasattr(result, 'column_values'):
-            # nebula5-python 格式
-            for row in result.rows():
-                if hasattr(row, 'values') and len(row.values) >= 3:
-                    # Field, Type, Null, Default, Comment
-                    field_name = row.values[0].get_sVal()
-                    field_type = row.values[1].get_sVal()
-                    nullable_str = row.values[2].get_sVal()
-                    
-                    if isinstance(field_name, bytes):
-                        field_name = field_name.decode('utf-8')
-                    if isinstance(field_type, bytes):
-                        field_type = field_type.decode('utf-8')
-                    if isinstance(nullable_str, bytes):
-                        nullable_str = nullable_str.decode('utf-8')
-                    
-                    nullable = nullable_str.upper() == "YES"
-                    
-                    properties.append(PropertySchema(
-                        name=field_name,
-                        type=field_type,
-                        nullable=nullable
-                    ))
-        elif hasattr(result, 'as_primitive'):
-            # 尝试 as_primitive 方法
-            data = result.as_primitive()
-            for row in data:
-                if isinstance(row, (list, tuple)) and len(row) >= 3:
-                    field_name = str(row[0])
-                    field_type = str(row[1])
-                    nullable_str = str(row[2])
-                    nullable = nullable_str.upper() == "YES"
-                    
-                    properties.append(PropertySchema(
-                        name=field_name,
-                        type=field_type,
-                        nullable=nullable
-                    ))
-    except Exception as e:
-        log(f"解析 DESCRIBE 结果失败: {e}")
-    
-    return properties
